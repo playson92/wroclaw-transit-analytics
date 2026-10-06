@@ -64,6 +64,7 @@ data/processed/*
 docker-compose.override.yml
 
 # Temporary files
+output/codex_runs/
 *.tmp
 *.temp
 ~$*

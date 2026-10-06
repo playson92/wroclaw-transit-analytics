@@ -42,6 +42,32 @@ ruff format --check .
 python -m pytest
 ```
 
+## GTFS ingestion (implemented)
+
+The first working feature downloads an explicitly selected official GTFS archive,
+preserves its bytes in raw, validates the `wroclaw-static-mvp-v1` profile and writes
+a JSON completion manifest. Later analytical processing remains planned.
+
+Start in the repository directory. Copy the address of a specific **Pobierz** link
+from the [official file catalogue](https://open-data.cui.wroclaw.pl/hdb/ft/6/), then run:
+
+```powershell
+Set-Location C:\projekty\wroclaw-transit-analytics
+.\.venv\Scripts\python.exe -m wroclaw_transit_analytics.gtfs --help
+.\.venv\Scripts\python.exe -m wroclaw_transit_analytics.gtfs --url "<OFFICIAL_ZIP_URL>"
+```
+
+Alternatively, set the environment variable in PowerShell:
+
+```powershell
+$env:GTFS_URL = "<OFFICIAL_ZIP_URL>"
+.\.venv\Scripts\python.exe -m wroclaw_transit_analytics.gtfs
+```
+
+`--url` takes precedence over `GTFS_URL`. A `.env` file is not loaded automatically.
+There is no automatic selection of the latest resource. See
+[GTFS ingestion](docs/gtfs-ingestion.md) for raw layout, failure handling and validation limits.
+
 ## Author
 
 Jonatan Tomaszewicz
