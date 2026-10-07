@@ -67,7 +67,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U wta_test_admin -d wta_test"
+          --health-cmd "pg_isready -h 127.0.0.1 -U wta_test_admin -d wta_test"
           --health-interval 3s --health-timeout 3s --health-retries 30
     env:
       TEST_DATABASE_URL: "host=127.0.0.1 port=5432 dbname=wta_test user=wta_test_admin password=ci_test_only"
