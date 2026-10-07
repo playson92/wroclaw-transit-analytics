@@ -119,7 +119,6 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: wta-ci-${{ github.run_id }}-${{ github.run_attempt }}
       POSTGRES_PORT: "15433"
-      SILVER_DIR: ${{ runner.temp }}/wta-silver-input
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -131,7 +130,8 @@ jobs:
           echo "::add-mask::$loader_password"
           echo "POSTGRES_PASSWORD=$admin_password" >> "$GITHUB_ENV"
           echo "WTA_LOADER_PASSWORD=$loader_password" >> "$GITHUB_ENV"
-          mkdir -p "$SILVER_DIR" evidence
+          echo "SILVER_DIR=$RUNNER_TEMP/wta-silver-input" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/wta-silver-input" evidence
           echo "$GITHUB_SHA" > evidence/tested-sha.txt
       - name: Build the application image
         run: |
