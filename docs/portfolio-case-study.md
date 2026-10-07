@@ -80,3 +80,23 @@ po restarcie zachowały wyniki. To działająca aplikacja z syntetycznym GTFS.
 ![Przegląd demo](screenshots/demo-overview.png)
 ![Linia i punkt demo](screenshots/demo-line-point.png)
 ![Dane i jakość demo](screenshots/demo-quality.png)
+
+## Rzeczywiste ekrany oficjalnego snapshotu
+
+Pełny pipeline, kontrolne SELECT i wszystkie widoki przeszły w
+[CI 37678301811](https://github.com/playson92/wroclaw-transit-analytics/actions/runs/37678301811),
+commit `3d13234cd73948cdba3f4e73e658dc92baa1941f`. Daty 2026-10-07…2026-10-08;
+identyfikatory, filtry i SHA zapisano w [real-browser.json](screenshots/real-browser.json).
+Wyszukanie linii/punktu w prawdziwej liście porównano z niezależnym SELECT gold.
+Nowe pobranie dało ten sam hash snapshotu, więc dataset_id pozostało to samo.
+
+![Przegląd oficjalnego GTFS](screenshots/real-overview.png)
+![Linia i punkt oficjalnego GTFS](screenshots/real-line-point.png)
+![Dzienne odstępy oficjalnego GTFS](screenshots/real-headways.png)
+![Dane i jakość oficjalnego GTFS](screenshots/real-quality.png)
+
+Linux: offline/AppTest, 23 przypadki PostgreSQL, Compose/Chromium i realny GTFS PASS.
+Windows: offline i parser/preflight/regresja native exit skryptu PASS; pełny runtime
+Compose i realny import NOT_RUN, ponieważ Docker CLI/daemon nie były dostępne.
+Szczegółowy raport końcowego SHA jest w review bundle. Dokumentacyjne screenshoty
+mają jawny commit wykonania; nie są makietami ani dowodem działania lokalnego Windowsa.
