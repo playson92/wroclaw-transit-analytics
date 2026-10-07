@@ -13,6 +13,10 @@ from .sample_data import write_sample_data
 
 
 def main(argv: list[str] | None = None) -> int:
+    if sys.platform == "win32":
+        for stream in (sys.stdout, sys.stderr):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Wrocław Transit Analytics — przygotowanie GTFS.")
     commands = parser.add_subparsers(dest="command", required=True)
     prepare_parser = commands.add_parser("prepare", help="Raw → bronze → silver i raport jakości.")
@@ -27,6 +31,7 @@ def main(argv: list[str] | None = None) -> int:
     sample_parser.add_argument("--json", dest="as_json", action="store_true")
     init_parser = commands.add_parser("db-init", help="Transakcyjne migracje PostgreSQL 17.")
     init_parser.add_argument("--loader-role", help="Przyznaj istniejącej roli prawa append/read.")
+    init_parser.add_argument("--reader-role", choices=["wta_reader"], help="Utwórz/grantuj reader.")
     init_parser.add_argument("--json", dest="as_json", action="store_true")
     load_parser = commands.add_parser("db-load", help="Zweryfikowane silver → PostgreSQL 17.")
     load_parser.add_argument("--silver-manifest", type=Path, required=True)
@@ -41,9 +46,36 @@ def main(argv: list[str] | None = None) -> int:
     analytics_parser.add_argument("--max-grid-rows", type=int, default=5_000_000)
     analytics_parser.add_argument("--timeout-seconds", type=int, default=120)
     analytics_parser.add_argument("--json", dest="as_json", action="store_true")
+    for name in ("run", "demo"):
+        flow = commands.add_parser(name, help="Istniejący pipeline raw → silver → SQL gold.")
+        flow.add_argument("--output-root", type=Path, default=Path("data"))
+        flow.add_argument("--json", dest="as_json", action="store_true")
+        if name == "run":
+            flow.add_argument("--raw-manifest", type=Path, required=True)
+            flow.add_argument("--start-date", required=True)
+            flow.add_argument("--end-date", required=True)
+    dashboard_parser = commands.add_parser("dashboard", help="Dashboard z opcjonalnego extra.")
+    dashboard_parser.add_argument("--port", type=int, default=8501)
+    dashboard_parser.add_argument("--address", default="127.0.0.1")
     args = parser.parse_args(argv)
     try:
-        if args.command == "analytics":
+        if args.command == "dashboard":
+            from .dashboard.launcher import launch
+
+            return launch(args.port, args.address)
+        elif args.command in ("run", "demo"):
+            from . import pipeline
+
+            result = (
+                pipeline.demo(args.output_root)
+                if args.command == "demo"
+                else pipeline.run(
+                    args.raw_manifest, args.start_date, args.end_date, args.output_root
+                )
+            )
+            print(json.dumps(result, default=str, ensure_ascii=True))
+            return 0 if result["status"] == "PASSED" else 1
+        elif args.command == "analytics":
             analyzed = analyze(
                 args.dataset_id,
                 args.start_date,
@@ -61,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
         elif args.command == "db-init":
-            applied = initialize(loader_role=args.loader_role)
+            applied = initialize(loader_role=args.loader_role, reader_role=args.reader_role)
             result = {"status": "INITIALIZED" if applied else "UP_TO_DATE", "applied": applied}
             print(
                 json.dumps(result) if args.as_json else f"{result['status']}: {', '.join(applied)}"

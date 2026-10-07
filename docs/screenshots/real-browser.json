@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "url": "http://127.0.0.1:18502",
+  "tested_sha": "3d13234cd73948cdba3f4e73e658dc92baa1941f",
+  "dataset_id": "gtfs_00a11db35a3dff8c854a5bdba9ee73842ff795561a9a50480119e7d6fb799546",
+  "analysis_id": "analysis_b07c0d87aa644479083db4434778dced55cf8804ce4a9d1c3ac4bada9ebb503d",
+  "expected_ui_kpi": {
+    "trips": "25766",
+    "departures": "541284",
+    "active_routes": 136,
+    "served_stops": 2484
+  },
+  "filters": {
+    "initial_route": "Selected 715 · route_id=715. Linia",
+    "selected_route": "Selected 715 · route_id=715. Linia",
+    "selectboxes": [
+      "Snapshot danych\n\nreal_gtfs · e7d6fb799546",
+      "Analiza\n\n2026-10-07 — 2026-10-08 · da9ebb503d",
+      "Linia\n\n715 · route_id=715",
+      "Punkt zatrzymania\n\nStadion Olimpijski · stop_id=1237",
+      "Źródłowy direction_id\n\nWszystkie kierunki"
+    ],
+    "initial_table_text": ""
+  },
+  "refresh": "PASS",
+  "reload": "PASS"
+}

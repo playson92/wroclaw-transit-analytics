@@ -1,6 +1,6 @@
 # PostgreSQL 17 — Sprint 02
 
-Gałąź do review: `feat/postgres-runtime`. Sprint 01 (PR #3) jest scalony do main.
+Sprinty 01–03 są scalone do main. Sprint 04 ma osobny draft PR #6.
 Sprint 02 dodaje bazę silver, migracje i runtime Compose. Sprint 03 rozszerza runtime
 o [wersjonowane SQL gold](metrics.md); 001 pozostaje bez zmian, upgrade dodaje 002.
 Wymagany major to 17; `postgres:17` nie jest deklaracją najnowszej wersji PostgreSQL.
@@ -47,7 +47,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 notepad .env
 ```
 
-Wpisz własne dwa różne hasła w POSTGRES_PASSWORD i WTA_LOADER_PASSWORD.
+Wpisz własne trzy różne hasła w POSTGRES_PASSWORD, WTA_LOADER_PASSWORD i WTA_READER_PASSWORD.
 Pozostaw nazwę bazy `wta`, port 5433 lub wybierz wolny POSTGRES_PORT.
 SILVER_DIR wskazuje cały `C:/projekty/wroclaw-transit-analytics/data/silver`.
 Compose czyta `.env` do interpolacji; Python sam nie czyta tego pliku.

@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "url": "http://127.0.0.1:18501",
+  "tested_sha": "6bdff963213f9cec3b7504de91c00aced07cffc6",
+  "dataset_id": "gtfs_e8daea5cce299621c82fb742d73075957bdc8cfb3ec395fd5b71f9a802c040d6",
+  "analysis_id": "analysis_73a074a36c49ef9237c63d878a4890f632f313b6364c571918de8a43017e1bf0",
+  "expected_ui_kpi": {
+    "trips": 16,
+    "departures": 25,
+    "active_routes": 2,
+    "served_stops": 3
+  },
+  "filters": {
+    "initial_route": "Selected D1 · route_id=D1. Linia",
+    "selected_route": "Selected D2 · route_id=D2. Linia",
+    "selectboxes": [
+      "Snapshot danych\n\nsynthetic_demo · f9a802c040d6",
+      "Analiza\n\n2026-10-01 — 2026-10-07 · 43017e1bf0",
+      "Linia\n\nD2 · route_id=D2",
+      "Punkt zatrzymania\n\nDemo Plac · stop_id=NA",
+      "Źródłowy direction_id\n\nWszystkie kierunki"
+    ],
+    "initial_table_text": ""
+  },
+  "refresh": "PASS",
+  "reload": "PASS"
+}

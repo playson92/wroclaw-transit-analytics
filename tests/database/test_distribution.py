@@ -62,6 +62,19 @@ def test_installed_wheel_contains_migrations(tmp_path):
     assert "001_warehouse.sql" in check.stdout
     assert "002_gold.sql" in check.stdout
     assert "lag(departure_seconds)" in check.stdout
+    dashboard_sql = run(
+        [
+            sys.executable,
+            "-c",
+            "from wroclaw_transit_analytics.dashboard.data import sql_text; "
+            "from importlib.resources import files; print(sql_text('overview.sql')); "
+            "print(files('wroclaw_transit_analytics.dashboard').joinpath('app.py').is_file())",
+        ],
+        cwd=tmp_path,
+        env=environment,
+    )
+    assert "count(DISTINCT route_id)" in dashboard_sql.stdout
+    assert "True" in dashboard_sql.stdout
     run(
         [sys.executable, "-m", "wroclaw_transit_analytics", "db-init", "--help"],
         cwd=tmp_path,

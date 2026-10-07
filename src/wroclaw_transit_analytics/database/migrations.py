@@ -4,7 +4,7 @@ import hashlib
 from importlib.resources import files
 
 from .connection import DatabaseError, connect
-from .roles import grant_loader
+from .roles import grant_loader, grant_reader
 
 MIGRATION_LOCK = 0x5754410001
 
@@ -52,9 +52,16 @@ def apply_migrations(connection, migrations: list[tuple[str, str, str]] | None =
     return applied
 
 
-def initialize(database_url: str | None = None, *, loader_role: str | None = None) -> list[str]:
+def initialize(
+    database_url: str | None = None,
+    *,
+    loader_role: str | None = None,
+    reader_role: str | None = None,
+) -> list[str]:
     with connect(database_url) as connection, connection.transaction():
         applied = apply_migrations(connection)
         if loader_role is not None:
             grant_loader(connection, loader_role)
+        if reader_role is not None:
+            grant_reader(connection, reader_role)
         return applied

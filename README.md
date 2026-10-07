@@ -1,10 +1,32 @@
 # Wroclaw Transit Analytics
 
-Local-first platform for processing and analysing public transport data from Wroclaw.
+Odtwarzalna analiza rozkładu GTFS: raw → bronze/silver Parquet i jakość → PostgreSQL
+→ SQL gold → dashboard Streamlit po polsku.
+
+## Jeden start demo
+
+Wymagany działający Docker/daemon i Compose v2. PowerShell:
+
+```powershell
+Set-Location 'C:\projekty\wroclaw-transit-analytics'
+& ([scriptblock]::Create((Get-Content -Encoding UTF8 -LiteralPath '.\scripts\start-demo.ps1' -Raw))) -RepoRoot (Get-Location).Path -DashboardPort 8501 -PostgresPort 5433
+```
+
+Skrypt buduje obraz non-root, inicjalizuje bazę i role, wykonuje ten sam pipeline demo
+i uruchamia dashboard. Wypisuje rzeczywisty URL; adres oczekiwany przy domyślnym porcie
+to http://127.0.0.1:8501. Inny port: `-DashboardPort 8502`. Powtórzenie zachowuje hasła
+i named volumes własnego projektu wta-demo. Nie nadpisuje `.env` ani nie instaluje Dockera.
+**DANE SYNTETYCZNE — nie rozkład Wrocławia**. Linux/macOS: `sh scripts/start-demo.sh`.
+
+[Dashboard, reader i dokładne uruchomienie](docs/dashboard.md),
+[studium portfolio](docs/portfolio-case-study.md),
+[release notes/checklista v0.2.0](docs/release-notes-v0.2.0.md).
+Kod: MIT. Dane: CC0 1.0 według [oficjalnych metadanych](https://open-data.cui.wroclaw.pl/hdb/metadane/13/),
+odczyt 2026-10-07. Dane rozkładowe nie oznaczają punktualności, pasażerów ani realtime.
 
 ## MVP
 
-The first version will:
+Zaimplementowany przepływ obejmuje:
 
 1. download a public GTFS dataset,
 2. preserve the original ZIP file in the raw data layer,
@@ -26,13 +48,14 @@ The first version will:
 - pytest
 - Ruff
 - GitHub Actions
+- Streamlit (opcjonalny dashboard)
 
 ## Local setup
 
 ```powershell
 py -V:3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
+python -m pip install -c constraints.txt -e ".[dev,dashboard,ui-test]"
 ```
 
 ## Checks
@@ -40,14 +63,14 @@ python -m pip install -e ".[dev]"
 ```powershell
 ruff check .
 ruff format --check .
-python -m pytest
+python -m pytest -m "not integration and not browser"
 ```
 
 ## GTFS ingestion (implemented)
 
 The first working feature downloads an explicitly selected official GTFS archive,
 preserves its bytes in raw, validates the `wroclaw-static-mvp-v1` profile and writes
-a JSON completion manifest. File preparation is implemented below; SQL analytics and UI remain planned.
+a JSON completion manifest. File preparation, SQL analytics and the optional UI are implemented.
 
 Start in the repository directory. Copy the address of a specific **Pobierz** link
 from the [official file catalogue](https://open-data.cui.wroclaw.pl/hdb/ft/6/), then run:
@@ -95,7 +118,7 @@ Times above 24:00 retain their GTFS service-day meaning. Missing allowed times s
 Each run preserves source/model identity and inventories files excluded from the MVP.
 Nonempty frequencies is preserved in bronze and marks quantitative gold unsupported.
 Verified silver can now be loaded into PostgreSQL 17 using transactional COPY.
-Gold SQL is implemented below; the dashboard remains planned.
+Gold SQL is implemented below; the dashboard reads its results using a separate reader role.
 
 ## PostgreSQL runtime (Sprint 02)
 
