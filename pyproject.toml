@@ -13,21 +13,28 @@ authors = [{ name = "Jonatan Tomaszewicz" }]
 dependencies = [
     "httpx>=0.28,<1",
     "pandas>=2.2,<3",
-    "pyarrow>=25.0.1,<26"
+    "pyarrow>=25.0.1,<26",
+    "psycopg[binary]>=3.2,<4"
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=9,<10",
-    "ruff>=0.15,<1"
+    "ruff>=0.15,<1",
+    "setuptools>=80",
+    "wheel"
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"wroclaw_transit_analytics.database" = ["sql/*.sql"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-config", "--strict-markers"]
+markers = ["integration: requires a dedicated PostgreSQL 17 TEST_DATABASE_URL"]
 
 [tool.ruff]
 target-version = "py312"

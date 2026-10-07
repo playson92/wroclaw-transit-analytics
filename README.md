@@ -94,7 +94,18 @@ to prepare. See the [Polish prepare guide](docs/prepare.md).
 Times above 24:00 retain their GTFS service-day meaning. Missing allowed times stay null.
 Each run preserves source/model identity and inventories files excluded from the MVP.
 Nonempty frequencies is preserved in bronze and marks quantitative gold unsupported.
-Current output is file-based; PostgreSQL, Docker, gold SQL and Streamlit belong to later sprints.
+Verified silver can now be loaded into PostgreSQL 17 using transactional COPY.
+Gold SQL and the dashboard remain planned.
+
+## PostgreSQL runtime (Sprint 02)
+
+The root CLI adds `db-init` and `db-load --silver-manifest PATH`.
+The [PostgreSQL and Compose guide](docs/postgres-runtime.md) gives exact PowerShell commands,
+roles, model grains, idempotence rules and read-only silver mounts.
+The application image runs as a non-root user. CI runs offline checks,
+real PostgreSQL 17 integration cases and a separate image build/Compose smoke.
+Local Windows Compose and the real-feed load require a working local Docker daemon;
+Linux CI does not establish Windows runtime compatibility.
 
 See [data contract](docs/data-contract.md), [scope](docs/project-scope.md)
 and [implementation plan](docs/project-plan.md).

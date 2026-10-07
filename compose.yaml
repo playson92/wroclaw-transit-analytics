@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: wta
+      POSTGRES_USER: wta_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD locally}
+      WTA_LOADER_PASSWORD: ${WTA_LOADER_PASSWORD:?Set WTA_LOADER_PASSWORD locally}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/bootstrap-loader.sh:/docker-entrypoint-initdb.d/10-loader.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U wta_admin -d wta"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  initializer:
+    build: .
+    profiles: [tools]
+    entrypoint: [python, -m, wroclaw_transit_analytics]
+    command: [db-init, --loader-role, wta_loader]
+    environment:
+      DATABASE_URL: "host=postgres port=5432 dbname=wta user=wta_admin"
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD locally}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  pipeline:
+    build: .
+    profiles: [tools]
+    entrypoint: [python, -m, wroclaw_transit_analytics]
+    environment:
+      DATABASE_URL: "host=postgres port=5432 dbname=wta user=wta_loader"
+      PGPASSWORD: ${WTA_LOADER_PASSWORD:?Set WTA_LOADER_PASSWORD locally}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pipeline_work:/work
+      - type: bind
+        source: ${SILVER_DIR:-./data/silver}
+        target: /input/silver
+        read_only: true
+        bind:
+          create_host_path: false
+
+volumes:
+  postgres_data:
+  pipeline_work:

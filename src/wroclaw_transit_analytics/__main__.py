@@ -3,8 +3,10 @@
 import argparse
 import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
+from .database import DatabaseError, initialize, load_silver
 from .preparation import PrepareError, prepare
 from .sample_data import write_sample_data
 
@@ -22,9 +24,31 @@ def main(argv: list[str] | None = None) -> int:
     )
     sample_parser.add_argument("--output-root", type=Path, default=Path("data"))
     sample_parser.add_argument("--json", dest="as_json", action="store_true")
+    init_parser = commands.add_parser("db-init", help="Transakcyjne migracje PostgreSQL 17.")
+    init_parser.add_argument("--loader-role", help="Przyznaj istniejącej roli prawa append/read.")
+    init_parser.add_argument("--json", dest="as_json", action="store_true")
+    load_parser = commands.add_parser("db-load", help="Zweryfikowane silver → PostgreSQL 17.")
+    load_parser.add_argument("--silver-manifest", type=Path, required=True)
+    load_parser.add_argument("--batch-size", type=int, default=50_000)
+    load_parser.add_argument("--json", dest="as_json", action="store_true")
     args = parser.parse_args(argv)
     try:
-        if args.command == "sample-data":
+        if args.command == "db-init":
+            applied = initialize(loader_role=args.loader_role)
+            result = {"status": "INITIALIZED" if applied else "UP_TO_DATE", "applied": applied}
+            print(
+                json.dumps(result) if args.as_json else f"{result['status']}: {', '.join(applied)}"
+            )
+            return 0
+        elif args.command == "db-load":
+            loaded = load_silver(args.silver_manifest, batch_size=args.batch_size)
+            print(
+                json.dumps(asdict(loaded))
+                if args.as_json
+                else f"{loaded.status}: {loaded.dataset_id}"
+            )
+            return 0
+        elif args.command == "sample-data":
             result = write_sample_data(args.output_root)
             if args.as_json:
                 print(
@@ -68,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"Bronze manifest: {result.bronze_manifest}\n"
                 f"Silver manifest: {result.silver_manifest}\nDQ: {result.quality_report}"
             )
-    except (PrepareError, OSError) as exc:
+    except (DatabaseError, PrepareError, OSError) as exc:
         print(f"Błąd: {exc}", file=sys.stderr)
         if isinstance(exc, PrepareError):
             for manifest in exc.manifests:

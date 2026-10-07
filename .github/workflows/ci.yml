@@ -12,9 +12,14 @@ on:
   pull_request:
     branches:
       - main
+      - feat/gtfs-data-foundation
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   quality:
@@ -46,4 +51,121 @@ jobs:
         run: ruff format --check .
 
       - name: Run tests
-        run: python -m pytest
+        run: >-
+          python -m pytest -m "not integration"
+          --basetemp "${{ runner.temp }}/pytest-offline-${{ github.run_id }}"
+          -o "cache_dir=${{ runner.temp }}/pytest-cache-offline"
+
+  postgres:
+    name: PostgreSQL 17 integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: wta_test
+          POSTGRES_USER: wta_test_admin
+          # Disposable CI service credential, never used outside this job.
+          POSTGRES_PASSWORD: ci_test_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U wta_test_admin -d wta_test"
+          --health-interval 3s --health-timeout 3s --health-retries 30
+    env:
+      TEST_DATABASE_URL: "host=127.0.0.1 port=5432 dbname=wta_test user=wta_test_admin password=ci_test_only"
+      WTA_REQUIRE_INTEGRATION: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: ".python-version"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install project and development tools
+        run: python -m pip install -e ".[dev]"
+      - name: Record tested SHA and PostgreSQL image digest
+        run: |
+          mkdir -p evidence
+          echo "$GITHUB_SHA" > evidence/tested-sha.txt
+          docker image inspect postgres:17 --format '{{json .RepoDigests}}' > evidence/postgres-image-digest.json
+      - name: Run real PostgreSQL cases
+        run: >-
+          python -m pytest -m integration
+          --basetemp "${{ runner.temp }}/pytest-postgres-${{ github.run_id }}"
+          -o "cache_dir=${{ runner.temp }}/pytest-cache-postgres"
+          --junitxml=evidence/postgres-tests.xml
+      - name: Verify actual execution with no integration skips
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('evidence/postgres-tests.xml').getroot()
+          cases = root.findall('.//testcase')
+          assert len(cases) >= 9, 'Expected actual integration cases'
+          assert not root.findall('.//skipped'), 'Integration skips are forbidden'
+          assert not root.findall('.//failure') and not root.findall('.//error')
+          print(f'Executed {len(cases)} PostgreSQL integration cases without skips')
+          PY
+      - name: Save PostgreSQL evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-evidence-${{ github.run_id }}
+          path: evidence/
+
+  compose:
+    name: Docker build and Compose smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      COMPOSE_PROJECT_NAME: wta-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      POSTGRES_PORT: "15433"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Configure disposable project credentials and input directory
+        run: |
+          admin_password=$(openssl rand -hex 24)
+          loader_password=$(openssl rand -hex 24)
+          echo "::add-mask::$admin_password"
+          echo "::add-mask::$loader_password"
+          echo "POSTGRES_PASSWORD=$admin_password" >> "$GITHUB_ENV"
+          echo "WTA_LOADER_PASSWORD=$loader_password" >> "$GITHUB_ENV"
+          echo "SILVER_DIR=$RUNNER_TEMP/wta-silver-input" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/wta-silver-input" evidence
+          echo "$GITHUB_SHA" > evidence/tested-sha.txt
+      - name: Build the application image
+        run: |
+          docker pull python:3.12-slim
+          docker compose --profile tools build
+          docker image inspect "$COMPOSE_PROJECT_NAME-pipeline" --format '{{.Id}}' > evidence/application-image-id.txt
+      - name: Start healthy PostgreSQL and record images
+        run: |
+          docker compose up -d --wait postgres
+          docker image inspect postgres:17 --format '{{json .RepoDigests}}' > evidence/postgres-image-digest.json
+          docker image inspect python:3.12-slim --format '{{json .RepoDigests}}' > evidence/python-image-digest.json
+      - name: Initialize twice without resetting data
+        run: |
+          docker compose run --rm initializer db-init --loader-role wta_loader --json | tee evidence/init-first.json
+          docker compose run --rm initializer db-init --loader-role wta_loader --json | tee evidence/init-second.json
+          grep -q UP_TO_DATE evidence/init-second.json
+      - name: Generate demo and prepare then load twice through the real CLI
+        run: |
+          docker compose run --rm --env WTA_SMOKE_REQUIRE_NEW=1 --entrypoint python pipeline /app/scripts/compose_smoke.py | tee evidence/compose-smoke.json
+      - name: Restart PostgreSQL and verify named-volume persistence
+        run: |
+          docker compose restart postgres
+          docker compose up -d --wait postgres
+          docker compose run --rm --entrypoint python pipeline -c 'import os, psycopg; c=psycopg.connect(os.environ["DATABASE_URL"]); n=c.execute("SELECT count(*) FROM meta.datasets WHERE status=\x27complete\x27").fetchone()[0]; assert n==1; print("Restart persistence PASS: 1 complete dataset")' | tee evidence/restart.txt
+      - name: Stop only this unique test project, retaining named volumes
+        if: always()
+        run: docker compose down --remove-orphans
+      - name: Save build and Compose evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compose-evidence-${{ github.run_id }}
+          path: evidence/
