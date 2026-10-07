@@ -6,6 +6,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+from .analytics import analyze
 from .database import DatabaseError, initialize, load_silver
 from .preparation import PrepareError, prepare
 from .sample_data import write_sample_data
@@ -31,9 +32,35 @@ def main(argv: list[str] | None = None) -> int:
     load_parser.add_argument("--silver-manifest", type=Path, required=True)
     load_parser.add_argument("--batch-size", type=int, default=50_000)
     load_parser.add_argument("--json", dest="as_json", action="store_true")
+    analytics_parser = commands.add_parser("analytics", help="SQL gold dla jawnych dni usługi.")
+    analytics_parser.add_argument("--dataset-id", required=True)
+    analytics_parser.add_argument("--start-date", required=True)
+    analytics_parser.add_argument("--end-date", required=True)
+    analytics_parser.add_argument("--max-days", type=int, default=31)
+    analytics_parser.add_argument("--max-events", type=int, default=5_000_000)
+    analytics_parser.add_argument("--max-grid-rows", type=int, default=5_000_000)
+    analytics_parser.add_argument("--timeout-seconds", type=int, default=120)
+    analytics_parser.add_argument("--json", dest="as_json", action="store_true")
     args = parser.parse_args(argv)
     try:
-        if args.command == "db-init":
+        if args.command == "analytics":
+            analyzed = analyze(
+                args.dataset_id,
+                args.start_date,
+                args.end_date,
+                max_days=args.max_days,
+                max_events=args.max_events,
+                max_grid_rows=args.max_grid_rows,
+                timeout_seconds=args.timeout_seconds,
+            )
+            print(
+                json.dumps(asdict(analyzed))
+                if args.as_json
+                else f"{analyzed.status}: {analyzed.analysis_id}\nDataset: {analyzed.dataset_id}\n"
+                f"Gold rows: {json.dumps(analyzed.row_counts)}\nCoverage: {json.dumps(analyzed.coverage)}"
+            )
+            return 0
+        elif args.command == "db-init":
             applied = initialize(loader_role=args.loader_role)
             result = {"status": "INITIALIZED" if applied else "UP_TO_DATE", "applied": applied}
             print(
