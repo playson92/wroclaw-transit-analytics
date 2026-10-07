@@ -56,19 +56,31 @@ def test_live_views_filters_refresh_and_screenshots():
             ).click()
         expect(page.get_by_test_id("stDataFrame").first).to_be_visible(timeout=30000)
         before = page.get_by_test_id("stDataFrame").first.inner_text()
-        initial_route = route.inner_text()
+        initial_route = route.get_attribute("aria-label")
         if kind == "demo":
+            expect(
+                page.get_by_text("Pierwszy znany czas (pierwszy dzień): 08:00:00", exact=True)
+            ).to_be_visible()
             route.click()
             page.get_by_role("option", name="D2 · route_id=D2", exact=True).click()
-            expect(route).to_contain_text("D2")
+            expect(route).to_have_attribute("aria-label", re.compile("Selected D2"))
             # A visible known time is derived from gold; changing route must change this value.
             expect(
                 page.get_by_text("Pierwszy znany czas (pierwszy dzień): 23:50:00", exact=True)
             ).to_be_visible(timeout=30000)
+        if kind == "demo":
+            stop = selects.filter(
+                has=page.get_by_text("Punkt zatrzymania", exact=True)
+            ).get_by_role("combobox")
+            stop.click()
+            page.get_by_role("option", name="Demo Plac · stop_id=NA", exact=True).click()
+            expect(
+                page.get_by_text("Pierwszy znany czas (pierwszy dzień): 24:10:00", exact=True)
+            ).to_be_visible(timeout=30000)
         page.screenshot(path=str(output / f"{kind}-line-point.png"), full_page=True)
         filters = {
             "initial_route": initial_route,
-            "selected_route": route.inner_text(),
+            "selected_route": route.get_attribute("aria-label"),
             "selectboxes": selects.all_inner_texts(),
             "initial_table_text": before,
         }

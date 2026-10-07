@@ -136,7 +136,7 @@ def test_hand_counted_global_group_partial_coverage(db_url, make_raw, tmp_path, 
 def test_dataset_and_overlapping_analysis_isolation(db_url, make_raw, tmp_path, monkeypatch):
     first = load_files(db_url, make_raw, tmp_path, numerical_files())
     files = numerical_files()
-    files["routes.txt"] = files["routes.txt"].replace("R1,R1", "R1,Other snapshot")
+    files["routes.txt"] = files["routes.txt"].replace(b"R1,R1", b"R1,Other snapshot")
     second = load_files(db_url, make_raw, tmp_path, files)
     a1 = analyze(first, "2026-10-01", "2026-10-02", db_url)
     a2 = analyze(first, "2026-10-02", "2026-10-03", db_url)

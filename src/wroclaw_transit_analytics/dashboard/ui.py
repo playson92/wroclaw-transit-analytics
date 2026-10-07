@@ -21,6 +21,12 @@ def hourly(records):
     if not records:
         st.info("Brak znanych regularnych odjazdów. Sprawdź pokrycie i braki czasów.")
         return
+    if len(records) > 200:
+        st.info("Wykres pokazuje 200 godzin z największą liczbą odjazdów. KPI obejmują cały filtr.")
+        records = sorted(
+            sorted(records, key=lambda r: r["departures"], reverse=True)[:200],
+            key=lambda r: r["service_hour"],
+        )
     frame = pd.DataFrame(records)
     frame["Godzina usługowa"] = frame["service_hour"].map(lambda h: f"{h}:00")
     # Ordinal, observed categories only: even hour 1000000 cannot expand an empty axis.
@@ -80,7 +86,27 @@ def overview(result):
         table(result["stops"], {"stop_name": "Nazwa", "departures": "Odjazdy"})
     st.caption("Top 20 w tabelach; KPI powyżej obejmują całą populację wybranego okresu.")
     with st.expander("Pokrycie gold dzień po dniu"):
-        table(result["coverage"])
+        coverage_table(result["coverage"])
+
+
+def coverage_table(records):
+    labels = {
+        "service_date": "Dzień",
+        "calendar_covered": "W obwiedni",
+        "total_events": "Wizyty stop_times",
+        "known_arrivals": "Znane przyjazdy",
+        "missing_arrivals": "Brakujące przyjazdy",
+        "known_departures": "Wszystkie znane odjazdy",
+        "missing_departures": "Wszystkie braki odjazdów",
+        "regular_events": "Regularne wizyty — mianownik",
+        "regular_known_departures": "Znane regularne odjazdy",
+        "regular_missing_departures": "Regularne braki czasów",
+        "no_pickup_events": "Bez wsiadania",
+        "on_request_events": "Na żądanie",
+        "approximate_regular_departures": "Przybliżone znane regularne",
+        "known_regular_departure_ratio": "Udział znanych regularnych [0–1]",
+    }
+    table([{key: r.get(key) for key in labels} for r in records], labels)
 
 
 def group(source, context):
@@ -214,7 +240,7 @@ def quality(result):
             "regularnych odjazdów. no_pickup i on_request są wykluczone. NULL oznacza "
             "nieznane; mianownik 0 nie daje procentu pokrycia."
         )
-        table(result["coverage"])
+        coverage_table(result["coverage"])
 
 
 def main():
