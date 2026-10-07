@@ -8,6 +8,7 @@ from datetime import date
 from importlib.resources import files
 
 import psycopg
+from psycopg.conninfo import conninfo_to_dict
 from psycopg.rows import dict_row
 
 from ..analytics.contract import METRICS_VERSION
@@ -47,8 +48,18 @@ def source_key():
 def reader():
     source_key()
     try:
+        settings = conninfo_to_dict(os.environ["READONLY_DATABASE_URL"])
+        if settings.get("user") != "wta_reader":
+            raise DashboardError("READONLY_DATABASE_URL musi wskazywać rolę wta_reader.")
+        if not all(settings.get(key) for key in ("host", "dbname", "password")):
+            raise DashboardError(
+                "READONLY_DATABASE_URL wymaga hosta, bazy i własnego hasła readera."
+            )
         with psycopg.connect(
-            os.environ["READONLY_DATABASE_URL"], connect_timeout=5, row_factory=dict_row
+            os.environ["READONLY_DATABASE_URL"],
+            port=settings.get("port", "5432"),
+            connect_timeout=5,
+            row_factory=dict_row,
         ) as conn:
             if conn.info.server_version // 10000 != 17:
                 raise DashboardError("Dashboard wymaga PostgreSQL 17.")

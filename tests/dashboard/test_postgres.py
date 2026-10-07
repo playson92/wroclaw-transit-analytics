@@ -49,8 +49,19 @@ def test_reader_upgrade_acl_and_no_password_rotation(db_url, monkeypatch, tmp_pa
             "SELECT rolsuper,rolcreatedb,rolcreaterole,rolbypassrls FROM pg_roles WHERE rolname=current_user"
         ).fetchone()
         assert flags == (False, False, False, False)
+        assert not conn.execute(
+            "SELECT has_schema_privilege(current_user,'silver','USAGE')"
+        ).fetchone()[0]
+        assert (
+            conn.execute(
+                "SELECT count(*) FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname=current_user)"
+            ).fetchone()[0]
+            == 0
+        )
         assert conn.execute("SELECT count(*) FROM meta.datasets").fetchone()[0] == 1
         assert conn.execute("SELECT count(*) FROM gold.route_daily").fetchone()[0] == 14
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            conn.execute("SELECT * FROM gold.active_services")
         rejected = []
         for query in (
             "INSERT INTO gold.analysis_days SELECT * FROM gold.analysis_days WHERE false",
@@ -74,6 +85,9 @@ def test_reader_upgrade_acl_and_no_password_rotation(db_url, monkeypatch, tmp_pa
             "flags": flags,
             "rejected": rejected,
             "password_unchanged": True,
+            "silver_usage": False,
+            "role_memberships": 0,
+            "unneeded_active_services_select": "DENIED",
             "preserved_datasets": 1,
             "preserved_gold_rows": 14,
         },

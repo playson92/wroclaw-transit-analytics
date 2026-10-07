@@ -67,5 +67,9 @@ def grant_reader(connection, role: str = "wta_reader") -> None:
         sql.SQL("GRANT SELECT ON meta.datasets, meta.analyses TO {}").format(identifier)
     )
     connection.execute(
-        sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA gold TO {}").format(identifier)
+        sql.SQL(
+            "GRANT SELECT ON gold.analysis_days, gold.route_daily, gold.stop_daily, "
+            "gold.route_stop_hourly, gold.route_stop_headways, gold.service_span, gold.coverage_daily, "
+            "gold.route_catalog, gold.stop_catalog TO {}"
+        ).format(identifier)
     )

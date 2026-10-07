@@ -58,12 +58,14 @@ Reader powstaje podczas db-init również w istniejącej bazie, bez ponownego en
 Postgresa i bez migracji 003. Migracje 001/002 oraz SQL KPI są niezmienione.
 Istniejący reader zachowuje hasło. Obca rola z uprzywilejowanymi atrybutami,
 członkostwem lub prawami zapisu powoduje odmowę grantowania. Reader ma USAGE meta/gold
-i SELECT meta.datasets/meta.analyses oraz relacji gold. Nie ma USAGE silver, członkostw,
+i SELECT meta.datasets/meta.analyses oraz dziewięciu potrzebnych relacji gold.
+Gold.active_services nie jest czytane przez UI i nie otrzymuje grantu. Nie ma USAGE silver, członkostw,
 superuser ani CREATE chronionych schematów. Testy naprawdę próbują zabronione
 INSERT/UPDATE/DELETE/TRUNCATE/ALTER/DROP/CREATE poza transakcją READ ONLY.
 
 UI wymaga osobnego READONLY_DATABASE_URL, sprawdza current_user=wta_reader i major 17.
-Nie używa DATABASE_URL. Każdy odczyt zamyka własną transakcję READ ONLY, z timeoutem 15 s
+DSN musi zawierać host, dbname, user=wta_reader i własne password; port domyślnie 5432.
+Nie używa DATABASE_URL ani hasła z PGPASSWORD. Każdy odczyt zamyka własną transakcję READ ONLY, z timeoutem 15 s
 i lock timeoutem 3 s. Cache ma TTL 60 s i limity 64/128 wpisów; klucz obejmuje hash
 źródła DB (bez DSN), dataset, analizę, daty i filtry. „Odśwież dane” czyści cache.
 Błąd nie jest cache'owany jako pusty sukces. Serwer ogranicza widoki do 20 000 wierszy;
