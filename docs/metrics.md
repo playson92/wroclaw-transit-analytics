@@ -2,7 +2,7 @@
 
 Program rozwija kalendarze usług i liczy agregaty SQL na PostgreSQL 17. To analityka
 deklarowanego rozkładu: nie pomiar rzeczywistych odjazdów ani czasu oczekiwania pasażera.
-Silver i jego tożsamość pozostają bez zmian. Dashboard należy do Sprintu 04.
+Silver i jego tożsamość pozostają bez zmian. [Dashboard Sprintu 04](dashboard.md) czyta te wyniki.
 
 ## Dni usług, kursy i czasy
 

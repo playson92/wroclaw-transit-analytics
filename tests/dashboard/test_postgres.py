@@ -179,3 +179,26 @@ def test_full_demo_idempotence(db_url, tmp_path, monkeypatch):
         assert conn.execute("SELECT count(*) AS n FROM meta.analyses").fetchone()["n"] == 1
         assert conn.execute("SELECT count(*) AS n FROM gold.route_daily").fetchone()["n"] == 14
     evidence("demo-repeat.json", {"status": "PASS", "first": first, "second": second})
+
+
+def test_no_admin_fallback_and_parameterized_filters(db_url, make_raw, tmp_path, monkeypatch):
+    dataset = load_files(db_url, make_raw, tmp_path, numerical_files())
+    analysis = analyze(dataset, "2026-10-01", "2026-10-02", db_url)
+    setup_reader(db_url, monkeypatch)
+    context = data.Context(
+        dataset,
+        analysis.analysis_id,
+        date(2026, 10, 1),
+        date(2026, 10, 2),
+        route="R1' OR 1=1 --",
+        stop="0001",
+        direction="0",
+    )
+    assert all(r["departures"] == 0 for r in data.fetch("group", context)["daily"])
+    monkeypatch.setenv("DATABASE_URL", db_url)
+    monkeypatch.delenv("READONLY_DATABASE_URL")
+    with pytest.raises(data.DashboardError, match="READONLY_DATABASE_URL"):
+        data.catalog()
+    monkeypatch.setenv("READONLY_DATABASE_URL", db_url)
+    with pytest.raises(data.DashboardError, match="wta_reader"):
+        data.catalog()

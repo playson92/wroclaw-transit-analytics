@@ -277,3 +277,40 @@ def test_invalid_dsn_redacted(monkeypatch):
     with pytest.raises(data.DashboardError) as error, data.reader():
         pass
     assert "secret_invalid_password_123" not in str(error.value)
+
+
+def test_cache_error_is_not_empty_success_and_database_source_changes(fake_data, monkeypatch):
+    catalog, _ = fake_data
+    calls = []
+
+    def failing_catalog():
+        calls.append(True)
+        raise data.DashboardError("Baza niedostępna")
+
+    cache.refresh()
+    monkeypatch.setattr(data, "catalog", failing_catalog)
+    assert app().error
+    assert app().error
+    assert len(calls) == 2
+    monkeypatch.setattr(data, "catalog", lambda: catalog)
+    at = app()
+    assert at.metric[0].value == "17"
+    monkeypatch.setenv("READONLY_DATABASE_URL", "another-source")
+    monkeypatch.setattr(data, "catalog", lambda: {"datasets": [], "analyses": []})
+    assert app().info[0].value.startswith("Brak zaimportowanych")
+
+
+def test_server_limit_is_an_error_not_a_truncated_result():
+    class Cursor:
+        def fetchmany(self, size):
+            assert size == 3
+            return [{"row": 1}, {"row": 2}, {"row": 3}]
+
+    class Connection:
+        def execute(self, statement, parameters):
+            assert "LIMIT %(fetch_limit)s" in statement
+            assert parameters["fetch_limit"] == 3
+            return Cursor()
+
+    with pytest.raises(data.DashboardError, match="limit"):
+        data.rows(Connection(), "SELECT 1", limit=2)

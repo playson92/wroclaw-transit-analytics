@@ -1,8 +1,8 @@
 {
-  "request": "sprint04-20261007",
+  "request": "sprint04-20261007-browser-fix-verified",
   "url": "https://open-data.cui.wroclaw.pl/hdb/download/141/",
   "verified_catalog": "https://open-data.cui.wroclaw.pl/hdb/ft/6/",
   "start_date": "2026-10-07",
   "end_date": "2026-10-08",
-  "reason": "Explicit user-authorized one-off real GTFS end-to-end attempt; isolated CI project"
+  "reason": "Revalidate the same explicit real GTFS experiment after correcting browser selectors; successful full Compose UI verified on 6bdff963213f9cec3b7504de91c00aced07cffc6"
 }

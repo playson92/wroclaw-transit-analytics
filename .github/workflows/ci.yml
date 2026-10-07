@@ -114,7 +114,7 @@ jobs:
           import xml.etree.ElementTree as ET
           root = ET.parse('evidence/postgres-tests.xml').getroot()
           cases = root.findall('.//testcase')
-          assert len(cases) >= 22, 'Expected actual loader, gold and reader/dashboard cases'
+          assert len(cases) >= 23, 'Expected actual loader, gold and reader/dashboard cases'
           assert not root.findall('.//skipped'), 'Integration skips are forbidden'
           assert not root.findall('.//failure') and not root.findall('.//error')
           print(f'Executed {len(cases)} PostgreSQL integration cases without skips')

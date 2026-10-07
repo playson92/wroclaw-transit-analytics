@@ -26,7 +26,7 @@ odczyt 2026-10-07. Dane rozkładowe nie oznaczają punktualności, pasażerów a
 
 ## MVP
 
-The first version will:
+Zaimplementowany przepływ obejmuje:
 
 1. download a public GTFS dataset,
 2. preserve the original ZIP file in the raw data layer,
@@ -48,6 +48,7 @@ The first version will:
 - pytest
 - Ruff
 - GitHub Actions
+- Streamlit (opcjonalny dashboard)
 
 ## Local setup
 
