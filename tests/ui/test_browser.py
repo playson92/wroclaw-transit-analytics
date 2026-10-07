@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 
 import pytest
-from playwright.sync_api import expect, sync_playwright
 
 from wroclaw_transit_analytics.dashboard.formatting import number
 
@@ -14,6 +13,8 @@ pytestmark = pytest.mark.browser
 
 
 def test_live_views_filters_refresh_and_screenshots():
+    from playwright.sync_api import expect, sync_playwright
+
     url = os.environ.get("WTA_BROWSER_URL")
     if not url:
         pytest.skip("Live browser NOT_RUN: WTA_BROWSER_URL unset")
@@ -39,7 +40,7 @@ def test_live_views_filters_refresh_and_screenshots():
                 page.get_by_text("DANE SYNTETYCZNE — nie rozkład Wrocławia", exact=True)
             ).to_be_visible()
         page.screenshot(path=str(output / f"{kind}-overview.png"), full_page=True)
-        page.get_by_role("radio", name="Linia / punkt zatrzymania", exact=True).check()
+        page.get_by_test_id("stRadio").get_by_text("Linia / punkt zatrzymania", exact=True).click()
         expect(
             page.get_by_role("heading", name="Linia / punkt zatrzymania", exact=True)
         ).to_be_visible()
@@ -71,7 +72,7 @@ def test_live_views_filters_refresh_and_screenshots():
             "selectboxes": selects.all_inner_texts(),
             "initial_table_text": before,
         }
-        page.get_by_role("radio", name="Dane i jakość", exact=True).check()
+        page.get_by_test_id("stRadio").get_by_text("Dane i jakość", exact=True).click()
         expect(page.get_by_role("heading", name="Dane i jakość", exact=True)).to_be_visible()
         expect(
             page.get_by_text("dataset_id: " + evidence["dataset_id"], exact=True)
@@ -80,7 +81,7 @@ def test_live_views_filters_refresh_and_screenshots():
             page.get_by_text("analysis_id: " + evidence["analysis_id"], exact=True)
         ).to_be_visible()
         page.screenshot(path=str(output / f"{kind}-quality.png"), full_page=True)
-        page.get_by_role("radio", name="Przegląd sieci", exact=True).check()
+        page.get_by_test_id("stRadio").get_by_text("Przegląd sieci", exact=True).click()
         page.get_by_role("button", name="Odśwież dane").click()
         expect(page.get_by_test_id("stMetricValue").first).to_have_text(number(expected["trips"]))
         page.reload()

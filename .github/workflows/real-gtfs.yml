@@ -42,7 +42,14 @@ jobs:
       - name: Official download and the same complete pipeline
         run: |
           docker compose run --name "$COMPOSE_PROJECT_NAME-real-run" --env WTA_REAL_E2E=1 --entrypoint python pipeline /app/scripts/real_feed_smoke.py | tee evidence/real-smoke.json
-          docker cp "$COMPOSE_PROJECT_NAME-real-run:/work/real-evidence/." evidence/
+      - name: Collect existing per-stage diagnostics
+        if: always()
+        run: |
+          if docker container inspect "$COMPOSE_PROJECT_NAME-real-run" >/dev/null 2>&1; then
+            docker cp "$COMPOSE_PROJECT_NAME-real-run:/work/real-evidence/." evidence/
+          else
+            echo 'NOT_RUN: real pipeline container was not created' > evidence/pipeline-not-run.txt
+          fi
       - name: Real results on screen
         env:
           WTA_BROWSER_URL: http://127.0.0.1:18502
