@@ -55,6 +55,8 @@ logs/
 # Local data
 data/raw/*
 data/processed/*
+data/bronze/*
+data/silver/*
 
 # Keep directory structure
 !data/raw/.gitkeep

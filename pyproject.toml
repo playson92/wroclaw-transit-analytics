@@ -12,7 +12,8 @@ license = "MIT"
 authors = [{ name = "Jonatan Tomaszewicz" }]
 dependencies = [
     "httpx>=0.28,<1",
-    "pandas>=2.2,<3"
+    "pandas>=2.2,<3",
+    "pyarrow>=25.0.1,<26"
 ]
 
 [project.optional-dependencies]
