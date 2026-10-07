@@ -1,0 +1,67 @@
+name: Explicit real GTFS end-to-end
+on:
+  push:
+    branches: [feat/dashboard-demo]
+    paths: [.github/real-e2e-request.json]
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  real:
+    name: Official Wroclaw GTFS explicit run
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      COMPOSE_PROJECT_NAME: wta-real-${{ github.run_id }}-${{ github.run_attempt }}
+      POSTGRES_PORT: "15434"
+      DASHBOARD_PORT: "18502"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Prepare isolated runtime and browser
+        run: |
+          mkdir -p evidence "$RUNNER_TEMP/real-silver"
+          echo "$GITHUB_SHA" > evidence/tested-sha.txt
+          for key in POSTGRES_PASSWORD WTA_LOADER_PASSWORD WTA_READER_PASSWORD; do
+            password=$(openssl rand -hex 24)
+            echo "::add-mask::$password"
+            echo "$key=$password" >> "$GITHUB_ENV"
+          done
+          echo "SILVER_DIR=$RUNNER_TEMP/real-silver" >> "$GITHUB_ENV"
+          python -m pip install -c constraints.txt -e '.[dev,dashboard,ui-test]'
+          python -m playwright install --with-deps chromium
+      - name: Build and initialize dedicated Compose project
+        run: |
+          docker compose --profile tools build
+          docker compose up -d --wait postgres
+          docker compose run --rm initializer
+      - name: Official download and the same complete pipeline
+        run: |
+          docker compose run --name "$COMPOSE_PROJECT_NAME-real-run" --env WTA_REAL_E2E=1 --entrypoint python pipeline /app/scripts/real_feed_smoke.py | tee evidence/real-smoke.json
+          docker cp "$COMPOSE_PROJECT_NAME-real-run:/work/real-evidence/." evidence/
+      - name: Real results on screen
+        env:
+          WTA_BROWSER_URL: http://127.0.0.1:18502
+          WTA_BROWSER_EXPECTED: evidence/real-smoke.json
+          WTA_BROWSER_EVIDENCE: evidence/screenshots
+        run: |
+          docker compose up -d --wait dashboard
+          python -m pytest tests/ui -m browser --basetemp "$RUNNER_TEMP/real-browser-$GITHUB_RUN_ID" --junitxml=evidence/real-browser-tests.xml
+      - name: Save image identity
+        run: |
+          docker image inspect postgres:17 --format '{{json .RepoDigests}}' > evidence/postgres-image-digest.json
+          docker image inspect "$COMPOSE_PROJECT_NAME-pipeline" --format '{{.Id}}' > evidence/application-image-id.txt
+      - name: Stop isolated project retaining named volumes
+        if: always()
+        run: docker compose down --remove-orphans
+      - name: Save real evidence without large data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-gtfs-evidence-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: error

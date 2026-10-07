@@ -64,6 +64,13 @@ def main():
     assert analyzed["coverage"]["known_departures"] == 44
     assert analyzed["coverage"]["regular_known_departures"] == 25
     assert analyzed["row_counts"]["route_daily"] == 14
+    full_first = cli("demo", "--output-root", root / "full-first")
+    full_repeat = cli("demo", "--output-root", root / "full-repeat")
+    assert full_first["status"] == full_repeat["status"] == "PASSED"
+    assert full_repeat["dataset_id"] == first["dataset_id"]
+    assert full_repeat["analysis_id"] == analyzed["analysis_id"]
+    assert full_repeat["stages"]["load"]["status"] == "ALREADY_LOADED"
+    assert full_repeat["stages"]["analyze"]["status"] == "ALREADY_ANALYZED"
     with verified_silver(manifest) as verified, psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         assert conn.info.server_version // 10000 == 17
         server_version = conn.info.server_version
@@ -115,6 +122,9 @@ def main():
         ).fetchone()[0]
     evidence = {
         "status": "PASS",
+        "full_demo": full_first,
+        "demo_repeat": full_repeat,
+        "expected_ui_kpi": {"trips": 16, "departures": 25, "active_routes": 2, "served_stops": 3},
         "dataset_id": first["dataset_id"],
         "row_counts": counts,
         "second_load": second["status"],

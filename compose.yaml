@@ -22,10 +22,11 @@ services:
     build: .
     profiles: [tools]
     entrypoint: [python, -m, wroclaw_transit_analytics]
-    command: [db-init, --loader-role, wta_loader]
+    command: [db-init, --loader-role, wta_loader, --reader-role, wta_reader]
     environment:
       DATABASE_URL: "host=postgres port=5432 dbname=wta user=wta_admin"
       PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD locally}
+      WTA_READER_PASSWORD: ${WTA_READER_PASSWORD:?Set WTA_READER_PASSWORD locally}
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,6 +49,23 @@ services:
         read_only: true
         bind:
           create_host_path: false
+
+  dashboard:
+    build: .
+    command: [python, -m, wroclaw_transit_analytics, dashboard, --address, "0.0.0.0"]
+    environment:
+      READONLY_DATABASE_URL: "host=postgres port=5432 dbname=wta user=wta_reader password=${WTA_READER_PASSWORD:?Set WTA_READER_PASSWORD locally}"
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-8501}:8501"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3)"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
 
 volumes:
   postgres_data:

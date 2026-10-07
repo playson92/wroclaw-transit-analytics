@@ -14,6 +14,7 @@ on:
       - main
       - feat/gtfs-data-foundation
       - feat/postgres-runtime
+      - feat/transit-analytics
 
 permissions:
   contents: read
@@ -43,7 +44,7 @@ jobs:
         run: python --version
 
       - name: Install project and development tools
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -c constraints.txt -e ".[dev,dashboard]"
 
       - name: Run Ruff lint checks
         run: ruff check . --output-format=github
@@ -53,9 +54,17 @@ jobs:
 
       - name: Run tests
         run: >-
-          python -m pytest -m "not integration"
+          python -m pytest -m "not integration and not browser"
           --basetemp "${{ runner.temp }}/pytest-offline-${{ github.run_id }}"
           -o "cache_dir=${{ runner.temp }}/pytest-cache-offline"
+          --junitxml=evidence/offline-tests.xml
+      - name: Save offline evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-evidence-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: error
 
   postgres:
     name: PostgreSQL 17 integration
@@ -88,7 +97,7 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - name: Install project and development tools
-        run: python -m pip install -e ".[dev]"
+        run: python -m pip install -c constraints.txt -e ".[dev,dashboard]"
       - name: Record tested SHA and PostgreSQL image digest
         run: |
           mkdir -p evidence
@@ -106,7 +115,7 @@ jobs:
           import xml.etree.ElementTree as ET
           root = ET.parse('evidence/postgres-tests.xml').getroot()
           cases = root.findall('.//testcase')
-          assert len(cases) >= 18, 'Expected actual loader and gold integration cases'
+          assert len(cases) >= 22, 'Expected actual loader, gold and reader/dashboard cases'
           assert not root.findall('.//skipped'), 'Integration skips are forbidden'
           assert not root.findall('.//failure') and not root.findall('.//error')
           print(f'Executed {len(cases)} PostgreSQL integration cases without skips')
@@ -117,6 +126,7 @@ jobs:
         with:
           name: postgres-evidence-${{ github.run_id }}
           path: evidence/
+          if-no-files-found: error
 
   compose:
     name: Docker build and Compose smoke
@@ -125,17 +135,29 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: wta-ci-${{ github.run_id }}-${{ github.run_attempt }}
       POSTGRES_PORT: "15433"
+      DASHBOARD_PORT: "18501"
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+      - name: Set up Python for live UI verification
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install browser verification tools
+        run: |
+          python -m pip install -c constraints.txt -e '.[dev,dashboard,ui-test]'
+          python -m playwright install --with-deps chromium
       - name: Configure disposable project credentials and input directory
         run: |
           admin_password=$(openssl rand -hex 24)
           loader_password=$(openssl rand -hex 24)
+          reader_password=$(openssl rand -hex 24)
           echo "::add-mask::$admin_password"
           echo "::add-mask::$loader_password"
+          echo "::add-mask::$reader_password"
           echo "POSTGRES_PASSWORD=$admin_password" >> "$GITHUB_ENV"
           echo "WTA_LOADER_PASSWORD=$loader_password" >> "$GITHUB_ENV"
+          echo "WTA_READER_PASSWORD=$reader_password" >> "$GITHUB_ENV"
           echo "SILVER_DIR=$RUNNER_TEMP/wta-silver-input" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/wta-silver-input" evidence
           echo "$GITHUB_SHA" > evidence/tested-sha.txt
@@ -151,17 +173,33 @@ jobs:
           docker image inspect python:3.12-slim --format '{{json .RepoDigests}}' > evidence/python-image-digest.json
       - name: Initialize twice without resetting data
         run: |
-          docker compose run --rm initializer db-init --loader-role wta_loader --json | tee evidence/init-first.json
-          docker compose run --rm initializer db-init --loader-role wta_loader --json | tee evidence/init-second.json
+          docker compose run --rm initializer db-init --loader-role wta_loader --reader-role wta_reader --json | tee evidence/init-first.json
+          docker compose run --rm initializer db-init --loader-role wta_loader --reader-role wta_reader --json | tee evidence/init-second.json
           grep -q UP_TO_DATE evidence/init-second.json
       - name: Generate demo then prepare load and analyze through the real CLI
         run: |
           docker compose run --rm --env WTA_SMOKE_REQUIRE_NEW=1 --entrypoint python pipeline /app/scripts/compose_smoke.py | tee evidence/compose-smoke.json
+      - name: Start installed non-root Streamlit and verify real UI
+        env:
+          WTA_BROWSER_URL: http://127.0.0.1:18501
+          WTA_BROWSER_EXPECTED: evidence/compose-smoke.json
+          WTA_BROWSER_EVIDENCE: evidence/screenshots
+        run: |
+          docker compose up -d --wait dashboard
+          docker compose exec -T dashboard id -u | tee evidence/dashboard-uid.txt
+          grep -q 10001 evidence/dashboard-uid.txt
+          python -m pytest tests/ui -m browser --basetemp "$RUNNER_TEMP/browser-$GITHUB_RUN_ID" --junitxml=evidence/browser-tests.xml
       - name: Restart PostgreSQL and verify named-volume persistence
         run: |
-          docker compose restart postgres
-          docker compose up -d --wait postgres
+          docker compose restart postgres dashboard
+          docker compose up -d --wait postgres dashboard
           docker compose run --rm --entrypoint python pipeline -c 'import os, psycopg; c=psycopg.connect(os.environ["DATABASE_URL"]); d=c.execute("SELECT count(*) FROM meta.datasets WHERE status=\x27complete\x27").fetchone()[0]; a=c.execute("SELECT count(*) FROM meta.analyses WHERE status=\x27complete\x27").fetchone()[0]; g=c.execute("SELECT count(*) FROM gold.route_daily").fetchone()[0]; assert (d,a,g)==(1,1,14); print("Restart persistence PASS: 1 dataset, 1 analysis, 14 route_daily rows")' | tee evidence/restart.txt
+      - name: Verify UI after restart and preserved gold
+        env:
+          WTA_BROWSER_URL: http://127.0.0.1:18501
+          WTA_BROWSER_EXPECTED: evidence/compose-smoke.json
+          WTA_BROWSER_EVIDENCE: evidence/after-restart
+        run: python -m pytest tests/ui -m browser --basetemp "$RUNNER_TEMP/browser-restart-$GITHUB_RUN_ID" --junitxml=evidence/browser-restart-tests.xml
       - name: Stop only this unique test project, retaining named volumes
         if: always()
         run: docker compose down --remove-orphans
@@ -171,3 +209,4 @@ jobs:
         with:
           name: compose-evidence-${{ github.run_id }}
           path: evidence/
+          if-no-files-found: error
