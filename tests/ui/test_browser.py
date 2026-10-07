@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from wroclaw_transit_analytics.dashboard.formatting import number
+from wroclaw_transit_analytics.dashboard.formatting import number, service_time
 
 pytestmark = pytest.mark.browser
 
@@ -48,12 +48,31 @@ def test_live_views_filters_refresh_and_screenshots():
         route = selects.filter(has=page.get_by_text("Linia", exact=True)).get_by_role("combobox")
         if kind == "real":
             route.click()
+            route.fill(evidence["group_selection"]["route_id"])
             page.get_by_role(
                 "option",
                 name=re.compile(
                     "route_id=" + re.escape(evidence["top_routes"][0]["route_id"]) + "$"
                 ),
             ).click()
+            stop = selects.filter(
+                has=page.get_by_text("Punkt zatrzymania", exact=True)
+            ).get_by_role("combobox")
+            stop.click()
+            stop.fill(evidence["group_selection"]["stop_id"])
+            page.get_by_role(
+                "option",
+                name=re.compile(
+                    "stop_id=" + re.escape(evidence["group_selection"]["stop_id"]) + "$"
+                ),
+            ).click()
+            expect(
+                page.get_by_text(
+                    "Pierwszy znany czas (pierwszy dzień): "
+                    + service_time(evidence["group_selection"]["first_departure_seconds"]),
+                    exact=True,
+                )
+            ).to_be_visible(timeout=30000)
         expect(page.get_by_test_id("stDataFrame").first).to_be_visible(timeout=30000)
         before = page.get_by_test_id("stDataFrame").first.inner_text()
         initial_route = route.get_attribute("aria-label")
@@ -84,6 +103,10 @@ def test_live_views_filters_refresh_and_screenshots():
             "selectboxes": selects.all_inner_texts(),
             "initial_table_text": before,
         }
+        page.get_by_role(
+            "heading", name="Odstępy — statystyki dzienne [sekundy]", exact=True
+        ).scroll_into_view_if_needed()
+        page.screenshot(path=str(output / f"{kind}-headways.png"), full_page=True)
         page.get_by_test_id("stRadio").get_by_text("Dane i jakość", exact=True).click()
         expect(page.get_by_role("heading", name="Dane i jakość", exact=True)).to_be_visible()
         expect(

@@ -56,6 +56,27 @@ def main():
             "SELECT * FROM gold.coverage_daily WHERE dataset_id=%s AND analysis_id=%s ORDER BY service_date",
             parameters,
         ).fetchall()
+        selected_route = routes[0]["route_id"]
+        selected_stop = conn.execute(
+            "SELECT stop_id FROM gold.service_span WHERE dataset_id=%s AND analysis_id=%s "
+            "AND route_id=%s AND service_date='2026-10-07' AND observation_count>0 ORDER BY stop_id LIMIT 1",
+            (*parameters, selected_route),
+        ).fetchone()["stop_id"]
+        group_rows = conn.execute(
+            "SELECT s.service_date,s.direction_id,s.first_departure_seconds,s.last_departure_seconds,"
+            "s.observation_count,s.regular_event_count,s.missing_regular_departures,"
+            "h.interval_count,h.median_seconds,h.p90_seconds "
+            "FROM gold.service_span s JOIN gold.route_stop_headways h "
+            "ON h.dataset_id=s.dataset_id AND h.analysis_id=s.analysis_id AND h.service_date=s.service_date "
+            "AND h.route_id=s.route_id AND h.stop_id=s.stop_id AND h.direction_id IS NOT DISTINCT FROM s.direction_id "
+            "WHERE s.dataset_id=%s AND s.analysis_id=%s AND s.route_id=%s AND s.stop_id=%s ORDER BY s.service_date,s.direction_id",
+            (*parameters, selected_route, selected_stop),
+        ).fetchall()
+        first_time = min(
+            r["first_departure_seconds"]
+            for r in group_rows
+            if str(r["service_date"]) == "2026-10-07" and r["first_departure_seconds"] is not None
+        )
     prepared = result["stages"]["prepare"]
     for name, path in (
         ("raw-manifest.json", downloaded.manifest_path),
@@ -75,6 +96,13 @@ def main():
         "expected_ui_kpi": kpi,
         "top_routes": routes,
         "coverage": coverage,
+        "group_selection": {
+            "route_id": selected_route,
+            "stop_id": selected_stop,
+            "direction": "ALL",
+            "first_departure_seconds": first_time,
+        },
+        "group_control_select": group_rows,
     }
     (output / "real-smoke.json").write_text(
         json.dumps(evidence, default=str, indent=2), encoding="utf-8"
