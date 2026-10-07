@@ -53,7 +53,7 @@ Compose czyta `.env` do interpolacji; Python sam nie czyta tego pliku.
 Nie wypisuj rozwiniętego `docker compose config`, bo zawiera hasła.
 
 ```powershell
-docker compose build
+docker compose --profile tools build
 if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 docker compose up -d --wait postgres
 if ($LASTEXITCODE -ne 0) { throw "PostgreSQL startup failed" }

@@ -136,7 +136,8 @@ jobs:
       - name: Build the application image
         run: |
           docker pull python:3.12-slim
-          docker compose build
+          docker compose --profile tools build
+          docker image inspect "$COMPOSE_PROJECT_NAME-pipeline" --format '{{.Id}}' > evidence/application-image-id.txt
       - name: Start healthy PostgreSQL and record images
         run: |
           docker compose up -d --wait postgres
