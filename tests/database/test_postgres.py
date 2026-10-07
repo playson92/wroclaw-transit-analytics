@@ -67,22 +67,28 @@ def rewrite_parquet(manifest_path, table, change):
 
 
 def test_migration_noop_checksum_and_transaction_rollback(db_url):
-    assert initialize(db_url) == ["001_warehouse.sql"]
+    versions = [entry[0] for entry in migration_files()]
+    assert initialize(db_url) == versions
     assert initialize(db_url) == []
     with psycopg.connect(db_url) as conn:
         history = conn.execute(
             "SELECT version, checksum, applied_at FROM meta.migrations"
         ).fetchall()
-        assert len(history) == 1 and history[0][2].tzinfo is not None
-        conn.execute("UPDATE meta.migrations SET checksum=%s", ("0" * 64,))
+        assert len(history) == len(versions) and all(row[2].tzinfo is not None for row in history)
+        conn.execute(
+            "UPDATE meta.migrations SET checksum=%s WHERE version='001_warehouse.sql'", ("0" * 64,)
+        )
     with pytest.raises(DatabaseError, match="checksum"):
         initialize(db_url)
     with psycopg.connect(db_url) as conn:
-        conn.execute("UPDATE meta.migrations SET checksum=%s", (migration_files()[0][1],))
+        conn.execute(
+            "UPDATE meta.migrations SET checksum=%s WHERE version='001_warehouse.sql'",
+            (migration_files()[0][1],),
+        )
     entries = [
         *migration_files(),
         (
-            "002_failed.sql",
+            "003_failed.sql",
             "1" * 64,
             "CREATE TABLE meta.rollback_probe (id INT); SELECT * FROM meta.no_such_table;",
         ),
@@ -91,7 +97,7 @@ def test_migration_noop_checksum_and_transaction_rollback(db_url):
         with pytest.raises(psycopg.errors.UndefinedTable):
             apply_migrations(conn, entries)
         assert conn.execute("SELECT to_regclass('meta.rollback_probe')").fetchone()[0] is None
-        assert conn.execute("SELECT count(*) FROM meta.migrations").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM meta.migrations").fetchone()[0] == len(versions)
 
 
 def test_concurrent_init_serializes(db_url):
@@ -105,7 +111,7 @@ def test_concurrent_init_serializes(db_url):
         futures = [pool.submit(initialize_at_once) for _ in range(2)]
         assert sorted(future.result(timeout=30) for future in futures) == [
             [],
-            ["001_warehouse.sql"],
+            [entry[0] for entry in migration_files()],
         ]
 
 

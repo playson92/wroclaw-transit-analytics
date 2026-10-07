@@ -1,7 +1,8 @@
 # PostgreSQL 17 — Sprint 02
 
 Gałąź do review: `feat/postgres-runtime`. Sprint 01 (PR #3) jest scalony do main.
-Ten sprint dodaje bazę silver, migracje i runtime Compose. Gold nie jest obliczany.
+Sprint 02 dodaje bazę silver, migracje i runtime Compose. Sprint 03 rozszerza runtime
+o [wersjonowane SQL gold](metrics.md); 001 pozostaje bez zmian, upgrade dodaje 002.
 Wymagany major to 17; `postgres:17` nie jest deklaracją najnowszej wersji PostgreSQL.
 Obraz aplikacji używa `python:3.12-slim`. CI zapisuje odczytane RepoDigests obrazów
 w artefaktach `postgres-evidence-*` i `compose-evidence-*` razem z testowanym SHA.
@@ -75,8 +76,8 @@ docker compose run --rm --entrypoint python pipeline /app/scripts/compose_smoke.
 if ($LASTEXITCODE -ne 0) { throw "Compose demo smoke failed" }
 ```
 
-Skrypt używa rzeczywistych poleceń sample-data, prepare i dwukrotnego db-load,
-weryfikuje zapytaniami counts, capabilities i uprawnienia wta_loader. Nie pobiera GTFS.
+Skrypt używa rzeczywistych poleceń sample-data, prepare i dwukrotnego db-load oraz analytics,
+weryfikuje zapytaniami counts, ręczne KPI, capabilities i uprawnienia wta_loader. Nie pobiera GTFS.
 Zapisuje wynik `/work/compose-smoke.json`; nie zawiera haseł.
 Każdy smoke tworzy świeże pliki. Powtórzony smoke na tej samej bazie może otrzymać
 ALREADY_LOADED w pierwszym load; CI wymaga LOADED i używa nowego, unikalnego projektu/bazy.

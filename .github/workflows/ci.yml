@@ -13,6 +13,7 @@ on:
     branches:
       - main
       - feat/gtfs-data-foundation
+      - feat/postgres-runtime
 
 permissions:
   contents: read
@@ -76,6 +77,7 @@ jobs:
     env:
       TEST_DATABASE_URL: "host=127.0.0.1 port=5432 dbname=wta_test user=wta_test_admin password=ci_test_only"
       WTA_REQUIRE_INTEGRATION: "1"
+      WTA_EVIDENCE_DIR: evidence
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -104,7 +106,7 @@ jobs:
           import xml.etree.ElementTree as ET
           root = ET.parse('evidence/postgres-tests.xml').getroot()
           cases = root.findall('.//testcase')
-          assert len(cases) >= 9, 'Expected actual integration cases'
+          assert len(cases) >= 18, 'Expected actual loader and gold integration cases'
           assert not root.findall('.//skipped'), 'Integration skips are forbidden'
           assert not root.findall('.//failure') and not root.findall('.//error')
           print(f'Executed {len(cases)} PostgreSQL integration cases without skips')
@@ -152,14 +154,14 @@ jobs:
           docker compose run --rm initializer db-init --loader-role wta_loader --json | tee evidence/init-first.json
           docker compose run --rm initializer db-init --loader-role wta_loader --json | tee evidence/init-second.json
           grep -q UP_TO_DATE evidence/init-second.json
-      - name: Generate demo and prepare then load twice through the real CLI
+      - name: Generate demo then prepare load and analyze through the real CLI
         run: |
           docker compose run --rm --env WTA_SMOKE_REQUIRE_NEW=1 --entrypoint python pipeline /app/scripts/compose_smoke.py | tee evidence/compose-smoke.json
       - name: Restart PostgreSQL and verify named-volume persistence
         run: |
           docker compose restart postgres
           docker compose up -d --wait postgres
-          docker compose run --rm --entrypoint python pipeline -c 'import os, psycopg; c=psycopg.connect(os.environ["DATABASE_URL"]); n=c.execute("SELECT count(*) FROM meta.datasets WHERE status=\x27complete\x27").fetchone()[0]; assert n==1; print("Restart persistence PASS: 1 complete dataset")' | tee evidence/restart.txt
+          docker compose run --rm --entrypoint python pipeline -c 'import os, psycopg; c=psycopg.connect(os.environ["DATABASE_URL"]); d=c.execute("SELECT count(*) FROM meta.datasets WHERE status=\x27complete\x27").fetchone()[0]; a=c.execute("SELECT count(*) FROM meta.analyses WHERE status=\x27complete\x27").fetchone()[0]; g=c.execute("SELECT count(*) FROM gold.route_daily").fetchone()[0]; assert (d,a,g)==(1,1,14); print("Restart persistence PASS: 1 dataset, 1 analysis, 14 route_daily rows")' | tee evidence/restart.txt
       - name: Stop only this unique test project, retaining named volumes
         if: always()
         run: docker compose down --remove-orphans

@@ -95,7 +95,7 @@ Times above 24:00 retain their GTFS service-day meaning. Missing allowed times s
 Each run preserves source/model identity and inventories files excluded from the MVP.
 Nonempty frequencies is preserved in bronze and marks quantitative gold unsupported.
 Verified silver can now be loaded into PostgreSQL 17 using transactional COPY.
-Gold SQL and the dashboard remain planned.
+Gold SQL is implemented below; the dashboard remains planned.
 
 ## PostgreSQL runtime (Sprint 02)
 
@@ -106,6 +106,16 @@ The application image runs as a non-root user. CI runs offline checks,
 real PostgreSQL 17 integration cases and a separate image build/Compose smoke.
 Local Windows Compose and the real-feed load require a working local Docker daemon;
 Linux CI does not establish Windows runtime compatibility.
+
+## Scheduled-service analytics (Sprint 03)
+
+`analytics --dataset-id ID --start-date YYYY-MM-DD --end-date YYYY-MM-DD --json`
+expands actual service calendars and computes daily trips, regular known departures,
+hourly counts, headways, service spans and per-day coverage in PostgreSQL SQL.
+The returned analysis_id identifies append-only results; repeat calls are idempotent.
+Unsupported frequencies and excessive expansion are rejected before publication.
+See [metrics and runnable examples](docs/metrics.md) for definitions, upgrade/grants,
+null/zero semantics, execution limits and service-day/DST restrictions.
 
 See [data contract](docs/data-contract.md), [scope](docs/project-scope.md)
 and [implementation plan](docs/project-plan.md).

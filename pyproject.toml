@@ -30,6 +30,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "wroclaw_transit_analytics.database" = ["sql/*.sql"]
+"wroclaw_transit_analytics.analytics" = ["sql/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

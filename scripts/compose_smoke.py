@@ -45,6 +45,25 @@ def main():
     if os.environ.get("WTA_SMOKE_REQUIRE_NEW") == "1":
         assert first["status"] == "LOADED"
     assert second["status"] == "ALREADY_LOADED"
+    arguments = [
+        "analytics",
+        "--dataset-id",
+        first["dataset_id"],
+        "--start-date",
+        "2026-10-01",
+        "--end-date",
+        "2026-10-07",
+    ]
+    analyzed = cli(*arguments)
+    repeated = cli(*arguments)
+    assert analyzed["status"] in ("ANALYZED", "ALREADY_ANALYZED")
+    if os.environ.get("WTA_SMOKE_REQUIRE_NEW") == "1":
+        assert analyzed["status"] == "ANALYZED"
+    assert repeated["status"] == "ALREADY_ANALYZED"
+    assert analyzed["coverage"]["total_events"] == 48
+    assert analyzed["coverage"]["known_departures"] == 44
+    assert analyzed["coverage"]["regular_known_departures"] == 25
+    assert analyzed["row_counts"]["route_daily"] == 14
     with verified_silver(manifest) as verified, psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         assert conn.info.server_version // 10000 == 17
         server_version = conn.info.server_version
@@ -74,6 +93,26 @@ def main():
             (first["dataset_id"],),
         ).fetchone()
         assert saved == ("complete", "synthetic_demo", verified.manifest["capabilities"])
+        analysis_id = analyzed["analysis_id"]
+        route_select = conn.execute(
+            "SELECT route_id, trip_count FROM gold.route_daily "
+            "WHERE analysis_id=%s AND service_date='2026-10-07' ORDER BY route_id",
+            (analysis_id,),
+        ).fetchall()
+        assert route_select == [("D1", 0), ("D2", 1)]
+        headway_select = conn.execute(
+            "SELECT departure_count, interval_count, avg_seconds, median_seconds, p90_seconds "
+            "FROM gold.route_stop_headways WHERE analysis_id=%s AND service_date='2026-10-01' "
+            "AND route_id='D1' AND stop_id='0001' AND direction_id=0",
+            (analysis_id,),
+        ).fetchone()
+        assert headway_select == (2, 1, 1800, 1800.0, 1800.0)
+        assert not conn.execute(
+            "SELECT has_schema_privilege(current_user, 'gold', 'CREATE')"
+        ).fetchone()[0]
+        assert not conn.execute(
+            "SELECT has_table_privilege(current_user, 'gold.route_daily', 'UPDATE,DELETE,TRUNCATE')"
+        ).fetchone()[0]
     evidence = {
         "status": "PASS",
         "dataset_id": first["dataset_id"],
@@ -81,6 +120,14 @@ def main():
         "second_load": second["status"],
         "uid": os.geteuid(),
         "server_version": server_version,
+        "analysis_id": analyzed["analysis_id"],
+        "analytics_second_call": repeated["status"],
+        "gold_row_counts": analyzed["row_counts"],
+        "selected_day_coverage": analyzed["coverage"],
+        "route_daily_oct07": route_select,
+        "headways_d1_0001_oct01": [
+            str(value) if hasattr(value, "as_tuple") else value for value in headway_select
+        ],
     }
     Path("/work/compose-smoke.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
     print(json.dumps(evidence))

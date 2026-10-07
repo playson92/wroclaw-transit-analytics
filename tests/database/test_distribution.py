@@ -53,15 +53,22 @@ def test_installed_wheel_contains_migrations(tmp_path):
         [
             sys.executable,
             "-c",
-            "from wroclaw_transit_analytics.database.migrations import migration_files; import wroclaw_transit_analytics.database as db; print(db.__file__); print(migration_files()[0][0])",
+            "from wroclaw_transit_analytics.database.migrations import migration_files; import wroclaw_transit_analytics.database as db; from wroclaw_transit_analytics.analytics.runner import sql_text, rules_digest; print(db.__file__); print([item[0] for item in migration_files()]); print(sql_text('departures.sql')); print(rules_digest())",
         ],
         cwd=tmp_path,
         env=environment,
     )
     assert str(target) in check.stdout
     assert "001_warehouse.sql" in check.stdout
+    assert "002_gold.sql" in check.stdout
+    assert "lag(departure_seconds)" in check.stdout
     run(
         [sys.executable, "-m", "wroclaw_transit_analytics", "db-init", "--help"],
+        cwd=tmp_path,
+        env=environment,
+    )
+    run(
+        [sys.executable, "-m", "wroclaw_transit_analytics", "analytics", "--help"],
         cwd=tmp_path,
         env=environment,
     )
