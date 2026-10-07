@@ -3,28 +3,17 @@ requires = ["setuptools>=80", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "portfolio-project-template"
+name = "wroclaw-transit-analytics"
 version = "0.1.0"
-description = "Reusable foundation for data analytics and Python portfolio projects."
+description = "Local-first platform for processing and analysing public transport data from Wroclaw."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = "MIT"
-authors = [
-    { name = "Jonatan Tomaszewicz" }
+authors = [{ name = "Jonatan Tomaszewicz" }]
+dependencies = [
+    "httpx>=0.28,<1",
+    "pandas>=2.2,<3"
 ]
-keywords = [
-    "portfolio",
-    "data-analytics",
-    "python",
-    "sql"
-]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Operating System :: OS Independent"
-]
-dependencies = []
 
 [project.optional-dependencies]
 dev = [
@@ -36,33 +25,17 @@ dev = [
 where = ["src"]
 
 [tool.pytest.ini_options]
-minversion = "9.0"
 testpaths = ["tests"]
-addopts = [
-    "-ra",
-    "--strict-config",
-    "--strict-markers"
-]
+addopts = ["-ra", "--strict-config", "--strict-markers"]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
-extend-exclude = [
-    "data",
-    ".venv"
-]
+extend-exclude = ["data", ".venv"]
 
 [tool.ruff.lint]
-select = [
-    "E4",
-    "E7",
-    "E9",
-    "F",
-    "I",
-    "B",
-    "UP"
-]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
 
 [tool.ruff.format]
 quote-style = "double"

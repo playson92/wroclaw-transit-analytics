@@ -1,70 +1,47 @@
-﻿# Portfolio Project Template
+# Wroclaw Transit Analytics
 
-Reusable template for data analytics, data engineering and Python application projects.
+Local-first platform for processing and analysing public transport data from Wroclaw.
 
-## Purpose
+## MVP
 
-This repository provides a common structure for personal portfolio projects covering:
+The first version will:
 
-- data analysis,
-- Python development,
-- SQL development,
-- data pipelines,
-- relational databases,
-- Docker,
-- automated testing,
-- documentation,
-- GitHub Actions.
+1. download a public GTFS dataset,
+2. preserve the original ZIP file in the raw data layer,
+3. validate required GTFS files and columns,
+4. extract stops, routes, trips and stop times,
+5. prepare cleaned analytical datasets,
+6. calculate basic route and stop statistics,
+7. run locally with automated tests and CI.
 
-## Project structure
+## Technology stack
 
-```text
-.
-├── .github/workflows/   # GitHub Actions workflows
-├── data/
-│   ├── processed/       # Locally processed data
-│   ├── raw/             # Locally downloaded source data
-│   └── sample/          # Small public example datasets
-├── docker/              # Additional Docker configuration
-├── docs/                # Architecture and project documentation
-├── scripts/             # Utility and maintenance scripts
-├── sql/                 # SQL queries and transformations
-├── src/                 # Application source code
-└── tests/               # Automated tests
-```
-
-## Planned tooling
-
-- Python
+- Python 3.12
+- Pandas
+- HTTPX
 - SQL
 - PostgreSQL
-- MySQL
-- Microsoft SQL Server
-- Docker and Docker Compose
+- Docker
 - pytest
+- Ruff
 - GitHub Actions
 
-Individual projects created from this template may use only part of this technology stack.
+## Local setup
 
-## Local development
+```powershell
+py -V:3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[dev]"
+```
 
-Detailed setup instructions will be added when the first project is created from this template.
+## Checks
 
-## Security
-
-Do not commit:
-
-- passwords,
-- API keys,
-- private certificates,
-- `.env` files,
-- confidential datasets,
-- company source code or company data.
-
-Use `.env.example` to document required environment variables without exposing their real values.
+```powershell
+ruff check .
+ruff format --check .
+python -m pytest
+```
 
 ## Author
 
 Jonatan Tomaszewicz
-
-Data Analyst & Analytics Developer
