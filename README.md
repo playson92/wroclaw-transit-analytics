@@ -18,6 +18,7 @@ The first version will:
 
 - Python 3.12
 - Pandas
+- PyArrow (Parquet)
 - HTTPX
 - SQL
 - PostgreSQL
@@ -46,7 +47,7 @@ python -m pytest
 
 The first working feature downloads an explicitly selected official GTFS archive,
 preserves its bytes in raw, validates the `wroclaw-static-mvp-v1` profile and writes
-a JSON completion manifest. Later analytical processing remains planned.
+a JSON completion manifest. File preparation is implemented below; SQL analytics and UI remain planned.
 
 Start in the repository directory. Copy the address of a specific **Pobierz** link
 from the [official file catalogue](https://open-data.cui.wroclaw.pl/hdb/ft/6/), then run:
@@ -67,6 +68,36 @@ $env:GTFS_URL = "<OFFICIAL_ZIP_URL>"
 `--url` takes precedence over `GTFS_URL`. A `.env` file is not loaded automatically.
 There is no automatic selection of the latest resource. See
 [GTFS ingestion](docs/gtfs-ingestion.md) for raw layout, failure handling and validation limits.
+
+## GTFS preparation (implemented)
+
+Completed raw runs now produce streamed textual bronze, typed silver Parquet,
+and a global quality report. Required values, keys, cross-table references and known
+service-time ordering must pass before silver is published. Source bytes remain unchanged.
+
+Start a small **synthetic** example after dependency installation:
+
+```powershell
+Set-Location C:\projekty\wroclaw-transit-analytics
+$demo = (& .\.venv\Scripts\python.exe -m wroclaw_transit_analytics sample-data --output-root data --json) | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw "Generator demo failed." }
+$result = (& .\.venv\Scripts\python.exe -m wroclaw_transit_analytics prepare --raw-manifest $demo.raw_manifest --output-root data --json) | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw "Prepare failed." }
+$result | Format-List
+```
+
+The returned paths identify this exact run; no latest-file guessing is required.
+After packages are installed, sample generation and prepare are offline.
+For official data, use the existing ingestion command, then pass its actual raw manifest
+to prepare. See the [Polish prepare guide](docs/prepare.md).
+
+Times above 24:00 retain their GTFS service-day meaning. Missing allowed times stay null.
+Each run preserves source/model identity and inventories files excluded from the MVP.
+Nonempty frequencies is preserved in bronze and marks quantitative gold unsupported.
+Current output is file-based; PostgreSQL, Docker, gold SQL and Streamlit belong to later sprints.
+
+See [data contract](docs/data-contract.md), [scope](docs/project-scope.md)
+and [implementation plan](docs/project-plan.md).
 
 ## Author
 
