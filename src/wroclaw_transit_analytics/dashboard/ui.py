@@ -9,7 +9,8 @@ import streamlit as st
 from . import cache, data
 from .formatting import direction_label, notice, number, percent, service_time
 
-VIEWS = ("Przegląd sieci", "Linia / punkt zatrzymania", "Dane i jakość")
+VIEWS = ("Mapa i linie", "Analityka", "Dane i jakość")
+ANALYTICS_VIEWS = ("Przegląd sieci", "Linia / punkt zatrzymania")
 
 
 def table(records, labels=None):
@@ -248,11 +249,14 @@ def main():
         page_title="Wrocław Transit Analytics", page_icon=":material/tram:", layout="wide"
     )
     st.title("Wrocław Transit Analytics")
-    st.caption("Rozkład zapisany w GTFS · SQL gold · wta-gold-v1")
+    st.caption("Przeglądarka komunikacji · rozkład zapisany w GTFS · analityka SQL gold")
     try:
         source = data.source_key()
         if st.sidebar.button("Odśwież dane", icon=":material/refresh:"):
             cache.refresh()
+            from ..explorer import ui as explorer_ui
+
+            explorer_ui.refresh()
         catalog = cache.catalog(source)
         datasets = {r["dataset_id"]: r for r in catalog["datasets"]}
         if not datasets:
@@ -268,6 +272,12 @@ def main():
         st.warning(notice(datasets[dataset].get("data_kind"))) if datasets[dataset].get(
             "data_kind"
         ) != "real_gtfs" else st.caption(notice("real_gtfs"))
+        view = st.sidebar.radio("Widok", VIEWS, key="view")
+        if view == "Mapa i linie":
+            from ..explorer import ui as explorer_ui
+
+            explorer_ui.render(source, dataset)
+            return
         if not analyses:
             st.info("Brak kompletnej analizy gold dla tego snapshotu. To nie są zerowe wyniki.")
             return
@@ -299,13 +309,16 @@ def main():
             st.info("Wybierz obie granice zakresu dat.")
             return
         context = data.Context(dataset, analysis, *dates)
-        view = st.sidebar.radio("Widok", VIEWS, key="view")
-        if view == VIEWS[0]:
-            overview(cache.fetch(source, "overview", context))
-        elif view == VIEWS[1]:
-            group(source, context)
-        else:
+        if view == "Dane i jakość":
             quality(cache.fetch(source, "quality", context))
+        else:
+            analytical_view = st.sidebar.radio(
+                "Widok analityki", ANALYTICS_VIEWS, key="analytics_view"
+            )
+            if analytical_view == ANALYTICS_VIEWS[0]:
+                overview(cache.fetch(source, "overview", context))
+            else:
+                group(source, context)
     except data.DashboardError as exc:
         st.error(str(exc))
     except Exception:

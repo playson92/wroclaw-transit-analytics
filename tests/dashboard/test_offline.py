@@ -199,9 +199,11 @@ def fake_data(monkeypatch):
 
 
 def app():
-    return AppTest.from_file(
+    at = AppTest.from_file(
         str(files("wroclaw_transit_analytics.dashboard").joinpath("app.py")), default_timeout=15
-    ).run()
+    )
+    at.session_state["view"] = "Analityka"
+    return at.run()
 
 
 def test_three_views_dependent_filters_and_null_direction(fake_data):
@@ -211,7 +213,7 @@ def test_three_views_dependent_filters_and_null_direction(fake_data):
     assert any("SYNTETYCZNE" in w.value for w in at.warning)
     assert at.metric[0].value == "17"
     assert at.metric[1].value == "Brak danych"
-    at.radio(key="view").set_value("Linia / punkt zatrzymania").run()
+    at.radio(key="analytics_view").set_value("Linia / punkt zatrzymania").run()
     assert at.selectbox(key="filter_stop").value == "0001"
     assert at.selectbox(key="filter_direction").options == [
         "Wszystkie kierunki",

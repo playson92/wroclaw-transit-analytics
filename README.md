@@ -3,13 +3,30 @@
 Odtwarzalna analiza rozkładu GTFS: raw → bronze/silver Parquet i jakość → PostgreSQL
 → SQL gold → dashboard Streamlit po polsku.
 
+## Mapa i linie
+
+Pierwszy ekran przegląda rzeczywisty snapshot GTFS: dzień, autobus/tramwaj, linia,
+kierunek/wariant, konkretny kurs i przystanek. Interaktywna mapa pokazuje shapes
+wybranego kursu; kliknięcie punktu otwiera jego rozkładowe odjazdy. Lista i tabela
+działają także bez podkładu. Analityka KPI i widok danych/jakości pozostają dostępne.
+
+[Dokładne uruchomienie i zakres przeglądarki](docs/transit-explorer.md). Nowa wersja
+jest testowana osobno na **8502**, z własną bazą i wolumenami; demo na 8501 pozostaje
+niezależne. Lokalny GTFS pobrany 2026-10-04 ma kalendarz 2026-10-03–2026-10-18 i
+jest oznaczony jako historyczny snapshot, bez obietnicy aktualnego rozkładu.
+
+Osobne obserwacje pojazdów CUI mają status źródła, walidację współrzędnych,
+czas pobrania/pomiaru i ograniczenie żądań. **Integracja live pozostaje zablokowana**:
+eksport nie potwierdza strefy czasu, a jego metadane licencji są niespójne z metadanymi
+pozycji. Punkty obserwacji nie są przypisywane do kursu ani przedstawiane jako aktualny GPS.
+
 ## Jeden start demo
 
 Wymagany działający Docker/daemon i Compose v2. PowerShell:
 
 ```powershell
 Set-Location 'C:\projekty\wroclaw-transit-analytics'
-& ([scriptblock]::Create((Get-Content -Encoding UTF8 -LiteralPath '.\scripts\start-demo.ps1' -Raw))) -RepoRoot (Get-Location).Path -DashboardPort 8501 -PostgresPort 5433
+& .\scripts\start-demo.ps1 -DashboardPort 8501 -PostgresPort 5433
 ```
 
 Skrypt buduje obraz non-root, inicjalizuje bazę i role, wykonuje ten sam pipeline demo
