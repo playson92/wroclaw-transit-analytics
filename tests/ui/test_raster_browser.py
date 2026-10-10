@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
-from tests.ui.test_explorer_browser import choose, control, select_service_day
+from tests.ui.test_explorer_browser import choose, control, select_dataset, select_service_day
 
 from wroclaw_transit_analytics.explorer.map import deck
 
@@ -70,7 +70,7 @@ def test_enabled_raster_demo_pixels_markers_and_stop_selection():
         expect(page.get_by_role("heading", name="Mapa i linie", exact=True)).to_be_visible(
             timeout=60000
         )
-        choose(page, "Snapshot danych", re.compile(expected["dataset_id"][-12:] + "$"))
+        select_dataset(page, expected["dataset_id"])
         expect(control(page, "Linia")).to_have_attribute(
             "aria-label", re.compile("Selected D"), timeout=30000
         )
@@ -154,8 +154,14 @@ def test_enabled_raster_demo_pixels_markers_and_stop_selection():
             page.wait_for_timeout(200)
         (output / "TECHNICAL-synthetic-raster-selected-map.png").write_bytes(selected_png)
         page.screenshot(path=str(output / "TECHNICAL-synthetic-raster-stop.png"), full_page=True)
+        old_chart = chart.element_handle()
+        assert old_chart is not None
         page.get_by_text("Podkład OpenStreetMap", exact=True).click()
         expect(toggle).not_to_be_checked()
+        # Provider changes recreate the chart to discard the old MapLibre raster.
+        # Wait for that lifecycle transition before acquiring screenshot pixels.
+        old_chart.wait_for_element_state("hidden", timeout=15000)
+        expect(chart).to_be_visible()
         deadline = time.monotonic() + 15
         while True:
             without_png = chart.screenshot()

@@ -95,7 +95,7 @@ def catalog():
     with reader() as conn:
         datasets = rows(
             conn,
-            "SELECT dataset_id, data_kind, loaded_at FROM meta.datasets "
+            "SELECT dataset_id, data_kind, loaded_at, provenance FROM meta.datasets "
             "WHERE status='complete' ORDER BY (data_kind='real_gtfs') DESC,loaded_at DESC,dataset_id",
             limit=1000,
         )

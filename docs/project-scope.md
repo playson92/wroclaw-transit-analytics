@@ -1,33 +1,38 @@
-# Project Scope
+# Zakres wydania 0.2.0
 
-## Goal
+Produkt to lokalna przeglądarka rozkładu Wrocławia z mapą, liniami, wariantami,
+konkretnymi kursami i przystankami, uzupełniona analityką SQL i odtwarzalnym pipeline'em.
+GTFS opisuje rozkład deklarowany, nie wykonanie przewozu ani aktualny GPS.
 
-Build a reproducible local GTFS pipeline and dashboard for scheduled public transport in Wroclaw.
+## Zaimplementowane
 
-## Implemented
+- Jawny oficjalny GTFS lub oznaczone demo syntetyczne; raw ZIP, walidacja, manifesty i hashe.
+- Strumieniowe bronze i typowane silver Parquet, kontrola jakości i zachowanie pochodzenia.
+- PostgreSQL 17, wersjonowane migracje, transakcyjny COPY, izolacja i idempotencja datasetów.
+- SQL gold: kalendarze i wyjątki, dzienne instancje kursów, regularne znane odjazdy,
+  headways, service spans i pokrycie danych; definicje `wta-gold-v1` pozostają zachowane.
+- Streamlit: Mapa i linie, Analityka oraz Dane i jakość, z osobnym readerem bez praw zapisu.
+- Geometria shapes właściwego kursu, przystanki i odjazdy; tekstowe ID, powtarzane wizyty,
+  czasy ponad 24:00, brak czasu oraz dokładny/przybliżony timepoint.
+- Docker Compose, cienki starter istniejącej bazy, świeżego demo i jawnego źródła GTFS.
+- Testy offline/AppTest, PostgreSQL, Compose/browser, syntetyczny raster i regresja dwóch
+  snapshotów z rozłącznymi kalendarzami; osobny lokalny odbiór rzeczywistego feedu.
 
-- static GTFS ingestion,
-- raw file archive,
-- source validation,
-- cleaned analytical datasets,
-- streamed textual bronze and typed silver Parquet,
-- global quality, provenance and nullable service-time coverage,
-- prepare CLI and deterministic, explicitly synthetic sample feed,
-- automated tests,
-- local execution.
+Status merge i konkretne wyniki odbioru są zapisane w końcowym raporcie testowanego SHA.
+Historyczne raporty nie opisują stanu nowszego kodu.
 
-## Remaining local MVP
+## Jawne ograniczenia
 
-- PostgreSQL storage,
-- Docker Compose,
-- dashboard,
-- gold SQL over explicit service dates.
+Snapshot GTFS może być archiwalny; obwiednia kalendarza nie zapewnia kursów każdego dnia.
+Bez shapes mapa nie udaje przebiegu ulic. Czasy nie są interpolowane. Rozwijanie
+frequencies/flex nie należy do obsługi ilościowej tego wydania.
 
-## Beyond MVP
+Eksperymentalne obserwacje CUI są domyślnie wyłączone. Niepotwierdzony czas i warunki
+użycia nie pozwalają przedstawiać ich jako ukończonego live GPS ani przypisywać do kursów.
+Awaria tej warstwy nie powinna blokować rozkładowej mapy i tabel.
 
-- GTFS Realtime and actual vehicle positions,
-- punctuality, passengers and occupancy require separate measured sources,
-- frequency-based service expansion, shapes and snapshot comparison,
-- optional cloud deployment.
+Poza zakresem pozostają punktualność, pasażerowie i occupancy, predykcje/ML, planer
+przesiadek, konta użytkowników, osobny frontend/mobile i wdrożenie chmurowe.
 
-See [the plan](project-plan.md), [prepare guide](prepare.md) and [data contract](data-contract.md).
+[README](../README.md) · [Stan implementacji](project-plan.md) · [Przeglądarka](transit-explorer.md)
+· [Kontrakt danych](data-contract.md).

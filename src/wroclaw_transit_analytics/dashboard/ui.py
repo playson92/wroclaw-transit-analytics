@@ -13,6 +13,38 @@ VIEWS = ("Mapa i linie", "Analityka", "Dane i jakość")
 ANALYTICS_VIEWS = ("Przegląd sieci", "Linia / punkt zatrzymania")
 
 
+def dataset_labels(datasets):
+    """Use recorded provenance, never infer an up-to-date timetable from an import."""
+    labels = {}
+    for dataset, row in datasets.items():
+        provenance = row.get("provenance") or {}
+        if row.get("data_kind") == "real_gtfs":
+            stamp = provenance.get("downloaded_at")
+            label = "Snapshot GTFS Wrocławia"
+            label += (
+                f" · pobrano {str(stamp)[:19].replace('T', ' ')} UTC"
+                if stamp
+                else " · data pobrania niepodana"
+            )
+        elif row.get("data_kind") == "synthetic_demo":
+            stamp = provenance.get("generated_at")
+            label = "Demo syntetyczne"
+            label += (
+                f" · wygenerowano {str(stamp)[:19].replace('T', ' ')} UTC"
+                if stamp
+                else " · data generowania niepodana"
+            )
+        else:
+            label = "Snapshot o niepotwierdzonym pochodzeniu"
+        labels[dataset] = label
+    for label in set(labels.values()):
+        duplicates = [dataset for dataset, name in labels.items() if name == label]
+        if len(duplicates) > 1:
+            for i, dataset in enumerate(duplicates, start=1):
+                labels[dataset] += f" · snapshot {i}"
+    return labels
+
+
 def table(records, labels=None):
     st.dataframe(pd.DataFrame(records, dtype=object).rename(columns=labels or {}), hide_index=True)
 
@@ -123,6 +155,9 @@ def group(source, context):
         key="filter_route",
         format_func=lambda r: f"{routes[r]['route_short_name']} · route_id={r}",
     )
+    if route is None:
+        st.info("Wybierz linię, aby wyświetlić analizę jej odjazdów.")
+        return
     route_context = replace(context, route=route)
     stops = cache.fetch(source, "filters", route_context)["stops"]
     names = {r["stop_id"]: r["stop_name"] for r in stops}
@@ -140,6 +175,9 @@ def group(source, context):
         key="filter_stop",
         format_func=lambda s: f"{names[s]} · stop_id={s}",
     )
+    if stop is None:
+        st.info("Wybierz punkt zatrzymania, aby wyświetlić analizę odjazdów.")
+        return
     stop_context = replace(route_context, stop=stop)
     directions = cache.fetch(source, "filters", stop_context)["directions"]
     options = ["ALL"] + [
@@ -151,6 +189,9 @@ def group(source, context):
     direction = st.selectbox(
         "Źródłowy direction_id", options, format_func=direction_label, key="filter_direction"
     )
+    if direction is None:
+        st.info("Wybierz kierunek lub Wszystkie, aby wyświetlić analizę odjazdów.")
+        return
     result = cache.fetch(source, "group", replace(stop_context, direction=direction))
     st.caption(
         "Wyniki dotyczą wybranego route_id, stop_id i kierunku. Każda mediana/p90 "
@@ -262,20 +303,35 @@ def main():
         if not datasets:
             st.info("Brak zaimportowanych datasetów. Uruchom demo lub pipeline run.")
             return
+        labels = dataset_labels(datasets)
+        if "dataset" not in st.session_state or (
+            st.session_state["dataset"] is not None and st.session_state["dataset"] not in datasets
+        ):
+            st.session_state["dataset"] = next(iter(datasets))
         dataset = st.sidebar.selectbox(
             "Snapshot danych",
             list(datasets),
+            index=None,
             key="dataset",
-            format_func=lambda d: f"{datasets[d]['data_kind']} · {d[-12:]}",
+            format_func=labels.__getitem__,
         )
+        if dataset is None:
+            st.info("Wybierz snapshot danych, aby otworzyć mapę i analitykę.")
+            return
+        from ..explorer import ui as explorer_ui
+
+        explorer_ui.select_snapshot(source, dataset)
+        with st.sidebar.expander("Identyfikator snapshotu"):
+            st.text(f"Wybrany dataset_id: {dataset}")
         analyses = {r["analysis_id"]: r for r in catalog["analyses"] if r["dataset_id"] == dataset}
         st.warning(notice(datasets[dataset].get("data_kind"))) if datasets[dataset].get(
             "data_kind"
         ) != "real_gtfs" else st.caption(notice("real_gtfs"))
         view = st.sidebar.radio("Widok", VIEWS, key="view")
+        # Widget cleanup runs even though these are radio views within one Streamlit page.
+        # Keep selections for this snapshot while visiting analytics/quality.
+        explorer_ui.retain_filters()
         if view == "Mapa i linie":
-            from ..explorer import ui as explorer_ui
-
             explorer_ui.render(source, dataset)
             return
         if not analyses:
@@ -284,14 +340,23 @@ def main():
         if st.session_state.get("analysis_dependency") != (source, dataset):
             st.session_state.pop("analysis", None)
             st.session_state["analysis_dependency"] = (source, dataset)
+        if "analysis" not in st.session_state or (
+            st.session_state["analysis"] is not None
+            and st.session_state["analysis"] not in analyses
+        ):
+            st.session_state["analysis"] = next(iter(analyses))
         analysis = st.sidebar.selectbox(
             "Analiza",
             list(analyses),
+            index=None,
             key="analysis",
             format_func=lambda a: (
                 f"{analyses[a]['start_date']} — {analyses[a]['end_date']} · {a[-10:]}"
             ),
         )
+        if analysis is None:
+            st.info("Wybierz analizę, aby wyświetlić wyniki gold.")
+            return
         selected = analyses[analysis]
         if st.session_state.get("context_dependency") != (source, dataset, analysis):
             for key in ("dates", "filter_route", "filter_stop", "filter_direction"):
@@ -305,7 +370,7 @@ def main():
             key="dates",
             format="YYYY-MM-DD",
         )
-        if len(dates) != 2:
+        if not isinstance(dates, (tuple, list)) or len(dates) != 2:
             st.info("Wybierz obie granice zakresu dat.")
             return
         context = data.Context(dataset, analysis, *dates)

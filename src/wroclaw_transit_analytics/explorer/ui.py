@@ -1,8 +1,6 @@
 """Day → route → direction/stop pattern → trip, with click and keyboard stop selection."""
 
 import hashlib
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
@@ -10,6 +8,43 @@ import streamlit as st
 from ..dashboard.formatting import service_time
 from . import data, positions
 from .map import deck
+
+FILTER_KEYS = (
+    "explorer_day",
+    "explorer_mode",
+    "explorer_search",
+    "explorer_route",
+    "explorer_variant",
+    "explorer_trip",
+    "explorer_stop",
+    "explorer_detail",
+    "explorer_basemap",
+    "explorer_vehicles",
+)
+
+
+def retain_filters():
+    """Keep this view's widget values when Streamlit omits them in another view."""
+    for key in FILTER_KEYS:
+        if key in st.session_state:
+            st.session_state[key] = st.session_state[key]
+
+
+def select_snapshot(source, dataset):
+    """Reset on every snapshot change, including changes made in analytics/quality."""
+    if reset_dependency(
+        "explorer_dataset_dep",
+        (source, dataset),
+        ("explorer_day", "explorer_route", "explorer_variant", "explorer_trip", "explorer_stop"),
+    ):
+        st.session_state["explorer_mode"] = "Wszystkie"
+        st.session_state["explorer_search"] = ""
+        st.session_state["explorer_detail"] = "Kurs"
+        st.session_state["explorer_vehicles"] = False
+
+
+def remember_day(widget_key):
+    st.session_state["explorer_day"] = st.session_state[widget_key]
 
 
 @st.cache_data(ttl=60, max_entries=128, show_spinner=False)
@@ -65,7 +100,9 @@ def reset_dependency(name, value, keys):
 
 def ensure_choice(key, options, default=None):
     # Explicit state writes tell the frontend to discard a selection from the old context.
-    if st.session_state.get(key) not in options:
+    if key not in st.session_state or (
+        st.session_state[key] is not None and st.session_state[key] not in options
+    ):
         st.session_state[key] = default if default is not None else next(iter(options))
 
 
@@ -127,16 +164,23 @@ def vehicle_status(result):
 
 def render(source, dataset):
     st.header("Mapa i linie")
+    st.caption("Mapa wybranego kursu rozkładowego — nie pozycja GPS pojazdu.")
     info = metadata(source, dataset)
     provenance = info["provenance"]
     if info["data_kind"] == "real_gtfs":
-        st.info(
-            f"Historyczny snapshot GTFS · pobranie UTC: {provenance.get('downloaded_at', 'Niepodane')} · kalendarz: {info['start_date']} — {info['end_date']}. Aktualność względem dzisiejszego rozkładu niepotwierdzona."
+        st.caption(
+            f"Historyczny snapshot GTFS · kalendarz: {info['start_date']} — {info['end_date']}. Aktualność względem dzisiejszego rozkładu niepotwierdzona."
+        )
+    else:
+        st.caption("Rozkład z generatora demo, bez rzeczywistych pojazdów.")
+    with st.expander("Pochodzenie i szczegóły snapshotu"):
+        st.text(f"dataset_id: {dataset}")
+        st.text(f"SHA-256 źródła: {info['source_sha256']}")
+        st.write(
+            "Pobranie UTC:", provenance.get("downloaded_at") or "Nie dotyczy / brak metadanych"
         )
         if url := provenance.get("final_url"):
             st.markdown(f"[Źródło snapshotu]({url})")
-    else:
-        st.caption("Rozkład z generatora demo, bez rzeczywistych pojazdów.")
     if not info["capabilities"].get("quantitative_gold_supported", False):
         st.warning(
             "Ten snapshot zawiera nieobsługiwane usługi częstotliwościowe/flex. Nie pokazujemy ich jako kompletnych kursów rozkładowych."
@@ -149,28 +193,43 @@ def render(source, dataset):
     controls, canvas = st.columns([1, 3], gap="large")
     with controls:
         st.subheader("Wybierz przejazd")
-        dataset_changed = reset_dependency(
-            "explorer_dataset_dep",
-            (source, dataset),
-            (
-                "explorer_day",
-                "explorer_route",
-                "explorer_variant",
-                "explorer_trip",
-                "explorer_stop",
-            ),
-        )
-        today = datetime.now(ZoneInfo("Europe/Warsaw")).date()
-        initial = min(max(today, info["start_date"]), info["end_date"])
-        if dataset_changed or "explorer_day" not in st.session_state:
+        select_snapshot(source, dataset)
+        # A historical snapshot starts at its first recorded day, independently of today.
+        # Later user choices, including valid days without service, remain untouched.
+        initial = info["start_date"]
+        if "explorer_day" not in st.session_state:
             st.session_state["explorer_day"] = initial
-        day = st.date_input("Dzień usługi", value=None, key="explorer_day", format="YYYY-MM-DD")
+        # An empty default permits actual browser clearing. Scope the widget identity
+        # to this snapshot so its frontend cannot reuse another snapshot's date.
+        # The canonical value survives navigation when Streamlit cleans up this widget.
+        day_key = (
+            "explorer_day_" + hashlib.sha256(repr((source, dataset)).encode()).hexdigest()[:16]
+        )
+        saved_day = st.session_state["explorer_day"]
+        if day_key not in st.session_state or st.session_state[day_key] != saved_day:
+            st.session_state[day_key] = saved_day
+        day = st.date_input(
+            "Dzień usługi",
+            value=None,
+            key=day_key,
+            format="YYYY-MM-DD",
+            on_change=remember_day,
+            args=(day_key,),
+        )
         mode = st.selectbox(
             "Rodzaj transportu",
             ["Wszystkie", "Tramwaj", "Autobus", "Inny transport"],
             key="explorer_mode",
         )
         search = st.text_input("Szukaj linii", key="explorer_search", placeholder="Numer lub nazwa")
+        if day is None:
+            st.info("Wybierz dzień usługi, aby wyświetlić kursy i mapę.")
+            return
+        if not info["start_date"] <= day <= info["end_date"]:
+            st.info(
+                f"Wybrany dzień {day} jest poza zakresem snapshotu: {info['start_date']} — {info['end_date']}. Wybierz dzień z tego zakresu."
+            )
+            return
         labels = route_labels(all_routes)
         routes = {
             r["route_id"]: r
@@ -179,7 +238,9 @@ def render(source, dataset):
             and search.casefold() in (labels[r["route_id"]] + " " + r["route_long_name"]).casefold()
         }
         if not routes:
-            st.info("Brak linii pasujących do wyszukiwania.")
+            st.info(
+                "Brak linii pasujących do wyszukiwania. Wyczyść wyszukiwanie lub wybierz Wszystkie rodzaje transportu."
+            )
             return
         reset_dependency(
             "explorer_routes_dep", (source, dataset, mode, search), ("explorer_route",)
@@ -194,10 +255,11 @@ def render(source, dataset):
             format_func=labels.__getitem__,
             key="explorer_route",
         )
+        if route is None:
+            st.info("Wybierz linię, aby wyświetlić jej kursy.")
+            return
         selected_route = routes[route]
-        st.caption(
-            f"{selected_route['route_long_name']} · {selected_route['agency_name']} · route_id={route}"
-        )
+        st.caption(f"{selected_route['route_long_name']} · {selected_route['agency_name']}")
         variants = fetch(source, "variants", dataset, day, route)
         reset_dependency(
             "explorer_variant_dep",
@@ -226,6 +288,9 @@ def render(source, dataset):
             format_func=variant_names.__getitem__,
             key="explorer_variant",
         )
+        if variant is None:
+            st.info("Wybierz kierunek / wariant, aby wyświetlić kursy.")
+            return
         trips = fetch(source, "trips", dataset, day, route, variant)
         reset_dependency(
             "explorer_trip_dep",
@@ -246,6 +311,9 @@ def render(source, dataset):
                 f"{service_time(by_trip[t]['start_seconds'])} → {service_time(by_trip[t]['end_seconds'])} · {by_trip[t]['trip_headsign'] or 'Bez opisu'} · trip_id={t}"
             ),
         )
+        if trip is None:
+            st.info("Wybierz konkretny kurs, aby wyświetlić mapę i rozkład.")
+            return
         visits = fetch(source, "stops", dataset, day, route, variant, trip)
         names = {r["stop_id"]: r["stop_name"] for r in visits}
         reset_dependency(
@@ -262,8 +330,14 @@ def render(source, dataset):
             format_func=lambda s: f"{names[s]} · stop_id={s}",
             key="explorer_stop",
         )
+        if stop is None:
+            st.info("Wybierz przystanek, aby wyświetlić mapę i odjazdy.")
+            return
         basemap = st.toggle("Podkład OpenStreetMap", value=True, key="explorer_basemap")
         show_vehicles = st.toggle("Obserwacje pojazdów z CUI", key="explorer_vehicles")
+        st.caption(
+            "Eksperyment CUI: osobne obserwacje z niepotwierdzonym czasem, bez potwierdzenia pozycji live."
+        )
         if show_vehicles:
             st.button(
                 "Odśwież pozycje",
@@ -287,7 +361,9 @@ def render(source, dataset):
         map_key = (
             "explorer_map_"
             + hashlib.sha256(
-                repr((source, dataset, day, route, variant, trip)).encode()
+                # Switching the map provider to None must recreate the frontend map;
+                # reusing its instance can leave the previous raster behind.
+                repr((source, dataset, day, route, variant, trip, basemap)).encode()
             ).hexdigest()[:16]
         )
         try:

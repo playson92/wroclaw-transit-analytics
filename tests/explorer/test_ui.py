@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, date, datetime
 from importlib.resources import files
 
@@ -37,7 +38,7 @@ def explorer_data(fake_data, monkeypatch):
                 }
                 for r, t in (("bus", 3), ("tram", 0))
             ]
-        if day == date(2026, 11, 1):
+        if day in (date(2026, 11, 1), date(2026, 10, 6)):
             return []
         if kind == "active_routes":
             return [{"route_id": "bus"}, {"route_id": "tram"}]
@@ -137,10 +138,101 @@ def test_map_is_first_view_filters_variants_trips_and_no_shapes(explorer_data):
     at.selectbox(key="explorer_stop").set_value("NA").run()
     at.radio(key="explorer_detail").set_value("Przystanek").run()
     assert at.dataframe[0].value["Odjazd"].iloc[0] == "25:10:00"
-    at.date_input(key="explorer_day").set_value(date(2026, 11, 1)).run()
-    assert any("Brak kursów" in i.value for i in at.info)
+    at.date_input[0].set_value(date(2026, 11, 1)).run()
+    assert any("poza zakresem snapshotu" in i.value for i in at.info)
     at.selectbox(key="dataset").set_value("d2").run()
-    assert at.date_input(key="explorer_day").value == date(2026, 10, 7)
+    assert at.date_input[0].value == date(2026, 10, 1)
+    assert not at.error and not at.exception
+
+
+def test_snapshot_resets_search_mode_and_dependents_but_view_navigation_preserves(explorer_data):
+    at = app()
+    at.date_input[0].set_value(date(2026, 10, 2)).run()
+    at.selectbox(key="explorer_mode").set_value("Tramwaj").run()
+    at.selectbox(key="explorer_variant").set_value("v2").run()
+    at.selectbox(key="explorer_stop").set_value("NA").run()
+    at.radio(key="explorer_detail").set_value("Przystanek").run()
+    for view in ("Analityka", "Dane i jakość", "Mapa i linie"):
+        at.radio(key="view").set_value(view).run()
+        assert not at.error and not at.exception
+    assert at.date_input[0].value == date(2026, 10, 2)
+    assert at.selectbox(key="explorer_mode").value == "Tramwaj"
+    assert at.selectbox(key="explorer_variant").value == "v2"
+    assert at.selectbox(key="explorer_stop").value == "NA"
+    assert at.radio(key="explorer_detail").value == "Przystanek"
+    at.text_input(key="explorer_search").set_value("not in the next snapshot").run()
+    assert any("Wyczyść wyszukiwanie" in i.value for i in at.info)
+    at.selectbox(key="dataset").set_value("d2").run()
+    assert at.date_input[0].value == date(2026, 10, 1)
+    assert at.selectbox(key="explorer_mode").value == "Wszystkie"
+    assert at.text_input(key="explorer_search").value == ""
+    assert at.selectbox(key="explorer_route").value == "bus"
+    assert at.selectbox(key="explorer_variant").value == "v1"
+    assert at.selectbox(key="explorer_stop").value == "001"
+    assert at.radio(key="explorer_detail").value == "Kurs"
+    assert not at.toggle(key="explorer_vehicles").value
+    at.selectbox(key="explorer_route").set_value("tram").run()
+    assert at.date_input[0].value == date(2026, 10, 1)
+    assert not at.error and not at.exception
+
+
+def test_cleared_day_does_not_query_and_valid_day_without_services_stays_selected(
+    explorer_data, monkeypatch
+):
+    original_fetch = data.fetch
+    calls = []
+
+    def fetch(kind, *args, **kwargs):
+        calls.append(kind)
+        return original_fetch(kind, *args, **kwargs)
+
+    monkeypatch.setattr(data, "fetch", fetch)
+    at = app()
+    ui.refresh()
+    calls.clear()
+    at.date_input[0].set_value(None).run()
+    assert any("Wybierz dzień usługi" in i.value for i in at.info)
+    assert calls == ["routes"]
+    assert not at.error and not at.exception
+    at.date_input[0].set_value(date(2026, 10, 6)).run()
+    assert any("Brak kursów" in i.value for i in at.info)
+    assert at.date_input[0].value == date(2026, 10, 6)
+    assert not at.error and not at.exception
+
+
+@pytest.mark.parametrize(
+    "key", ["explorer_route", "explorer_variant", "explorer_trip", "explorer_stop"]
+)
+def test_cleared_selection_has_instruction_instead_of_exception(explorer_data, key):
+    at = app()
+    at.selectbox(key=key).set_value(None).run()
+    assert any("Wybierz" in i.value for i in at.info)
+    assert not at.error and not at.exception
+
+
+def test_cleared_snapshot_and_analysis_have_instructions(explorer_data):
+    at = app()
+    at.selectbox(key="dataset").set_value(None).run()
+    assert any("Wybierz snapshot danych" in i.value for i in at.info)
+    assert not at.error and not at.exception
+    at.selectbox(key="dataset").set_value("d1").run()
+    at.radio(key="view").set_value("Analityka").run()
+    at.selectbox(key="analysis").set_value(None).run()
+    assert any("Wybierz analizę" in i.value for i in at.info)
+    assert not at.error and not at.exception
+
+
+def test_snapshot_changes_in_analytics_reset_map_even_after_return_to_original(explorer_data):
+    at = app()
+    at.date_input[0].set_value(date(2026, 10, 2)).run()
+    at.selectbox(key="explorer_mode").set_value("Tramwaj").run()
+    at.radio(key="view").set_value("Analityka").run()
+    at.selectbox(key="dataset").set_value("d2").run()
+    at.selectbox(key="dataset").set_value("d1").run()
+    at.radio(key="view").set_value("Mapa i linie").run()
+    assert at.date_input[0].value == date(2026, 10, 1)
+    assert at.selectbox(key="explorer_mode").value == "Wszystkie"
+    assert at.selectbox(key="explorer_route").value == "bus"
     assert not at.error and not at.exception
 
 
@@ -212,3 +304,17 @@ def test_map_layer_keeps_timetable_visits_and_attribution():
     assert "OpenStreetMap" in chart.to_json()
     assert chart._tooltip == {"text": "{label}"}  # GTFS is never rendered as tooltip HTML.
     assert deck(visits, [], "001", basemap=False).map_provider is None
+
+
+def test_basemap_provider_change_recreates_chart_and_keeps_selected_stop(explorer_data):
+    at = app()
+    at.selectbox(key="explorer_stop").set_value("NA").run()
+    with_basemap = at.get("deck_gl_json_chart")[0].proto
+    assert json.loads(with_basemap.json)["mapStyle"].startswith("data:application/json,")
+    at.toggle(key="explorer_basemap").set_value(False).run()
+    without_basemap = at.get("deck_gl_json_chart")[0].proto
+    assert without_basemap.id != with_basemap.id
+    assert json.loads(without_basemap.json).get("mapStyle") is None
+    assert json.loads(without_basemap.json).get("mapProvider") is None
+    assert at.selectbox(key="explorer_stop").value == "NA"
+    assert not at.error and not at.exception

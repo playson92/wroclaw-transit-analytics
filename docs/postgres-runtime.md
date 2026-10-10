@@ -1,6 +1,7 @@
 # PostgreSQL 17 — Sprint 02
 
-Sprinty 01–03 są scalone do main. Sprint 04 ma osobny draft PR #6.
+Etapy 01–04 są scalone do main; dashboard dostarczono przez PR #6.
+Aktualny explorer i starter wydania 0.2.0 opisuje [przeglądarka](transit-explorer.md).
 Sprint 02 dodaje bazę silver, migracje i runtime Compose. Sprint 03 rozszerza runtime
 o [wersjonowane SQL gold](metrics.md); 001 pozostaje bez zmian, upgrade dodaje 002.
 Wymagany major to 17; `postgres:17` nie jest deklaracją najnowszej wersji PostgreSQL.
@@ -60,12 +61,14 @@ docker compose up -d --wait postgres
 if ($LASTEXITCODE -ne 0) { throw "PostgreSQL startup failed" }
 docker compose run --rm initializer db-init --loader-role wta_loader --json
 if ($LASTEXITCODE -ne 0) { throw "db-init failed" }
-docker compose run --rm pipeline db-load --silver-manifest /input/silver/gtfs/20261007T124031398819Z_07856434a78f4eaa8bf92916d05cea09/manifest.json --json
+docker compose run --rm pipeline db-load --silver-manifest '/input/silver/gtfs/<jawny kompletny run>/manifest.json' --json
 if ($LASTEXITCODE -ne 0) { throw "db-load failed" }
 ```
 
-Podana ścieżka dotyczy istniejącego realnego silver z tego projektu. Gdy montujesz inny
-kompletny run, podstaw jego katalog; nie edytuj manifestu. Silver jest montowane read-only.
+To polecenia diagnostyczne niskiego poziomu: podstaw ścieżkę jawnie wybranego,
+kompletnego manifestu silver; nie wyszukuj „latest” i nie edytuj manifestu.
+Do zwykłego uruchomienia użyj startera opisanego na początku, który przekazuje
+rzeczywiste wyniki etapów bez przepisywania katalogu. Silver jest montowane read-only.
 Historyczne input.raw_manifest/archive_path to provenance: nie muszą istnieć w kontenerze.
 Kontener używa hosta `postgres`; host Windows używa `127.0.0.1:5433`.
 
@@ -115,7 +118,7 @@ if ($LASTEXITCODE -ne 0) { throw "db-init failed" }
 $passwordInput = Read-Host "Hasło wta_loader" -AsSecureString
 $env:PGPASSWORD = [System.Net.NetworkCredential]::new('', $passwordInput).Password
 $env:DATABASE_URL = "host=127.0.0.1 port=5433 dbname=wta user=wta_loader"
-.\.venv\Scripts\python.exe -m wroclaw_transit_analytics db-load --silver-manifest "C:\projekty\wroclaw-transit-analytics\data\silver\gtfs\20261007T124031398819Z_07856434a78f4eaa8bf92916d05cea09\manifest.json" --json
+.\.venv\Scripts\python.exe -m wroclaw_transit_analytics db-load --silver-manifest 'C:\dane GTFS\silver\<jawny kompletny run>\manifest.json' --json
 if ($LASTEXITCODE -ne 0) { throw "db-load failed" }
 Remove-Item Env:PGPASSWORD
 ```

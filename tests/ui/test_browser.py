@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 import pytest
+from tests.ui.test_explorer_browser import select_dataset
 
 from wroclaw_transit_analytics.dashboard.formatting import number, service_time
 
@@ -29,15 +30,7 @@ def test_live_views_filters_refresh_and_screenshots():
         errors = []
         page.on("pageerror", lambda error: errors.append(type(error).__name__))
         page.goto(url)
-        snapshot = (
-            page.get_by_test_id("stSelectbox")
-            .filter(has=page.get_by_text("Snapshot danych", exact=True))
-            .get_by_role("combobox")
-        )
-        snapshot.click()
-        page.get_by_role(
-            "option", name=re.compile(re.escape(evidence["dataset_id"][-12:]) + "$")
-        ).click()
+        select_dataset(page, evidence["dataset_id"])
         page.get_by_test_id("stRadio").get_by_text("Analityka", exact=True).click()
         expect(page.get_by_role("heading", name="Przegląd sieci", exact=True)).to_be_visible(
             timeout=60000
@@ -132,10 +125,7 @@ def test_live_views_filters_refresh_and_screenshots():
         page.get_by_role("button", name="Odśwież dane").click()
         expect(page.get_by_test_id("stMetricValue").first).to_have_text(number(expected["trips"]))
         page.reload()
-        snapshot.click()
-        page.get_by_role(
-            "option", name=re.compile(re.escape(evidence["dataset_id"][-12:]) + "$")
-        ).click()
+        select_dataset(page, evidence["dataset_id"])
         page.get_by_test_id("stRadio").get_by_text("Analityka", exact=True).click()
         expect(page.get_by_test_id("stMetricValue").first).to_have_text(
             number(expected["trips"]), timeout=30000

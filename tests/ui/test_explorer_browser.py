@@ -28,6 +28,63 @@ def choose(page, label, option):
     page.get_by_role("option", name=option, exact=isinstance(option, str)).click()
 
 
+def select_dataset(page, dataset_id):
+    """Select readable names, verifying the full ID only in technical details."""
+    from playwright.sync_api import expect
+
+    def selected():
+        return page.get_by_text("Wybrany dataset_id: " + dataset_id, exact=True).count() == 1
+
+    def settled():
+        expect(page.get_by_test_id("stApp")).to_have_attribute(
+            "data-test-script-state", "notRunning", timeout=30000
+        )
+        expect(page.locator('[data-stale="true"]')).to_have_count(0, timeout=30000)
+
+    settled()
+    if selected():
+        return
+    control(page, "Snapshot danych").click()
+    expect(page.get_by_role("option").first).to_be_visible()
+    options = page.get_by_role("option").all_text_contents()
+    page.keyboard.press("Escape")
+    transitions = []
+    for label in options:
+        # The technical expander is collapsed: inner_text() would return an empty
+        # string and make a negative wait succeed before the new sidebar delta.
+        previous = page.get_by_text(re.compile("^Wybrany dataset_id: ")).text_content()
+        if label in (control(page, "Snapshot danych").get_attribute("aria-label") or ""):
+            continue
+        choose(page, "Snapshot danych", label)
+        expect(control(page, "Snapshot danych")).to_have_attribute(
+            "aria-label", re.compile(re.escape(label))
+        )
+        expect(page.get_by_text(re.compile("^Wybrany dataset_id: "))).not_to_have_text(
+            previous, timeout=30000
+        )
+        # The sidebar delta arrives before the date/filter/map deltas. Wait for
+        # the entire rerun instead of clicking another snapshot through stale controls.
+        settled()
+        expect(control(page, "Snapshot danych")).to_have_attribute(
+            "aria-label", re.compile(re.escape(label))
+        )
+        transitions.append(
+            {
+                "label": label,
+                "id": page.get_by_text(re.compile("^Wybrany dataset_id: ")).text_content(),
+                "visible_label": control(page, "Snapshot danych").get_attribute("aria-label"),
+            }
+        )
+        if selected():
+            return
+    raise AssertionError(
+        "Expected complete snapshot is absent: "
+        + dataset_id
+        + "; transitions="
+        + json.dumps(transitions, ensure_ascii=False)
+    )
+
+
 def select_service_day(page, iso_day):
     from playwright.sync_api import expect
 
@@ -38,7 +95,11 @@ def select_service_day(page, iso_day):
     day.fill(displayed)
     day.press("Tab")
     page.keyboard.press("Escape")
-    expect(day).to_have_value(displayed)
+    # Editing an empty input uses ordinary hyphens; BaseWeb normalizes the
+    # committed date to en dashes. Assert the same date in either rendering.
+    expect(day).to_have_value(
+        re.compile("^" + "[-–]".join(map(re.escape, iso_day.split("-"))) + "$")
+    )
 
 
 def test_real_explorer_map_trips_click_filters_and_snapshot():
@@ -62,9 +123,7 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
         expect(page.get_by_role("heading", name="Mapa i linie", exact=True)).to_be_visible(
             timeout=60000
         )
-        expect(control(page, "Snapshot danych")).to_have_attribute(
-            "aria-label", re.compile(expected["dataset_id"][-12:])
-        )
+        select_dataset(page, expected["dataset_id"])
         page.get_by_text("Podkład OpenStreetMap", exact=True).click()
         for example in expected["examples"]:
             # Compare with the explicitly recorded service day, independently of today's date.
@@ -237,16 +296,25 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
         page.screenshot(path=str(output / "real-positions-status.png"), full_page=True)
         select_service_day(page, "2026-11-01")
         expect(
-            page.get_by_text(
-                "Brak kursów tej linii w wybranym dniu. Uwzględniono calendar i calendar_dates.",
-                exact=True,
-            )
+            page.get_by_text(re.compile("Wybrany dzień 2026-11-01 jest poza zakresem snapshotu"))
         ).to_be_visible(timeout=30000)
-        choose(page, "Snapshot danych", re.compile("synthetic_demo ·"))
+        # Keep the originally reproduced date. The standard demo's calendar is 01–31;
+        # 01–07 is its gold analysis, while the disjoint CI fixture has the short calendar.
+        select_service_day(page, "2026-10-10")
+        choose(page, "Snapshot danych", re.compile("^Demo syntetyczne"))
         expect(control(page, "Linia")).to_have_attribute(
             "aria-label", re.compile("Selected D"), timeout=30000
         )
+        day_field = page.get_by_test_id("stDateInputField").last
+        separator = "–" if "–" in day_field.input_value() else "-"
+        expect(day_field).to_have_value("2026-10-01".replace("-", separator))
+        expect(
+            page.get_by_test_id("stCheckbox")
+            .filter(has=page.get_by_text("Obserwacje pojazdów z CUI", exact=True))
+            .get_by_role("checkbox")
+        ).not_to_be_checked()
         choose(page, "Linia", re.compile("^D2 ·"))
+        expect(day_field).to_have_value("2026-10-01".replace("-", separator))
         expect(
             page.get_by_text(
                 "Brak zaimportowanej geometrii shapes dla tego kursu. Pokazujemy przystanki, bez udawania przebiegu ulic lub torowiska.",
@@ -260,7 +328,7 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
         page.screenshot(path=str(output / "demo-without-shapes.png"), full_page=True)
         assert page.get_by_test_id("stException").count() == 0
         assert not errors, errors
-        choose(page, "Snapshot danych", re.compile(expected["dataset_id"][-12:] + "$"))
+        select_dataset(page, expected["dataset_id"])
         expect(page.get_by_role("heading", name="Mapa i linie", exact=True)).to_be_visible()
         (output / "explorer-browser.json").write_text(
             json.dumps(

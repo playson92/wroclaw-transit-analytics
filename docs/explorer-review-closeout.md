@@ -1,4 +1,12 @@
-# Domknięcie review mapy i kursów — 2026-10-10
+# Historyczny review mapy i kursów — 2026-10-10, przed stabilizacją 0.2.0
+
+Ten dokument zachowuje wynik poprzedniego runu na `cfbe4b6`, w tym reprodukcję
+błędu daty. Nie opisuje bieżącego statusu wersji 0.2.0. Aktualne zachowanie
+i start opisuje [przeglądarka](transit-explorer.md); dowody końcowego SHA,
+regresji, CI oraz stanu merge są w końcowym `final-review-bundle.zip`.
+W poprzednim opisie 2026-10-01–07 pomylono zakres analizy demo z jego kalendarzem;
+istniejący generator obejmuje 2026-10-01–31. Końcowa regresja używa odrębnych,
+jawnie syntetycznych feedów o rzeczywiście rozłącznych kalendarzach.
 
 Baza review: `9040ddc97411ea878c68009598d1328717bbb16e`, gałąź
 `feat/transit-explorer`, istniejący PR #7. Jedyna dodatkowa zmiana runtime to
