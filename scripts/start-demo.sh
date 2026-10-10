@@ -1,9 +1,21 @@
 #!/bin/sh
 set -eu
 cd "$(dirname "$0")/.."
-command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1 || {
+command -v docker >/dev/null 2>&1 || {
   echo 'Brak Docker CLI lub daemona. Uruchom istniejący Docker i ponów start demo.' >&2
   exit 1
+}
+if [ -n "${DOCKER_HOST:-}" ] && [ -z "${DOCKER_CONTEXT:-}" ]; then
+  endpoint=$DOCKER_HOST
+else
+  active_context=${DOCKER_CONTEXT:-$(docker context show)}
+  endpoint=$(docker context inspect "$active_context" --format '{{.Endpoints.docker.Host}}')
+fi
+case "$endpoint" in unix:///*|npipe:////./pipe/*) ;; *)
+  echo 'Aktywna konfiguracja Dockera jest zdalna; nie użyto jej.' >&2; exit 1;;
+esac
+[ "$(docker info --format '{{.OSType}}')" = linux ] || {
+  echo 'Demo wymaga dostępnego lokalnego silnika Linux Dockera.' >&2; exit 1;
 }
 if [ ! -f .env.demo ]; then
   volumes=$(docker volume ls --filter label=com.docker.compose.project=wta-demo --format '{{.Name}}')

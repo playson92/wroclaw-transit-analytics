@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 import pytest
+from tests.ui.browser_network import protect_local_browser
 from tests.ui.test_explorer_browser import select_dataset
 
 from wroclaw_transit_analytics.dashboard.formatting import number, service_time
@@ -26,12 +27,12 @@ def test_live_views_filters_refresh_and_screenshots():
     with sync_playwright() as p:
         browser = p.chromium.launch(channel=os.environ.get("WTA_BROWSER_CHANNEL"))
         page = browser.new_page(viewport={"width": 1440, "height": 1050}, device_scale_factor=1)
-        page.route("https://tile.openstreetmap.org/**", lambda route: route.abort())
+        public_requests = protect_local_browser(page, url)
         errors = []
         page.on("pageerror", lambda error: errors.append(type(error).__name__))
         page.goto(url)
         select_dataset(page, evidence["dataset_id"])
-        page.get_by_test_id("stRadio").get_by_text("Analityka", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Analityka", exact=True).click()
         expect(page.get_by_role("heading", name="Przegląd sieci", exact=True)).to_be_visible(
             timeout=60000
         )
@@ -44,7 +45,9 @@ def test_live_views_filters_refresh_and_screenshots():
                 page.get_by_text("DANE SYNTETYCZNE — nie rozkład Wrocławia", exact=True)
             ).to_be_visible()
         page.screenshot(path=str(output / f"{kind}-overview.png"), full_page=True)
-        page.get_by_test_id("stRadio").get_by_text("Linia / punkt zatrzymania", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text(
+            "Linia / punkt zatrzymania", exact=True
+        ).click()
         expect(
             page.get_by_role("heading", name="Linia / punkt zatrzymania", exact=True)
         ).to_be_visible()
@@ -111,8 +114,9 @@ def test_live_views_filters_refresh_and_screenshots():
             "heading", name="Odstępy — statystyki dzienne [sekundy]", exact=True
         ).scroll_into_view_if_needed()
         page.screenshot(path=str(output / f"{kind}-headways.png"), full_page=True)
-        page.get_by_test_id("stRadio").get_by_text("Dane i jakość", exact=True).click()
-        expect(page.get_by_role("heading", name="Dane i jakość", exact=True)).to_be_visible()
+        page.get_by_test_id("stButtonGroup").get_by_text("Dane", exact=True).click()
+        expect(page.get_by_role("heading", name="Dane", exact=True)).to_be_visible()
+        page.get_by_text("Identyfikatory i hash", exact=True).click()
         expect(
             page.get_by_text("dataset_id: " + evidence["dataset_id"], exact=True)
         ).to_be_visible()
@@ -120,17 +124,19 @@ def test_live_views_filters_refresh_and_screenshots():
             page.get_by_text("analysis_id: " + evidence["analysis_id"], exact=True)
         ).to_be_visible()
         page.screenshot(path=str(output / f"{kind}-quality.png"), full_page=True)
-        page.get_by_test_id("stRadio").get_by_text("Analityka", exact=True).click()
-        page.get_by_test_id("stRadio").get_by_text("Przegląd sieci", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Analityka", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Przegląd sieci", exact=True).click()
+        page.get_by_text("Snapshot i narzędzia", exact=True).click()
         page.get_by_role("button", name="Odśwież dane").click()
         expect(page.get_by_test_id("stMetricValue").first).to_have_text(number(expected["trips"]))
         page.reload()
         select_dataset(page, evidence["dataset_id"])
-        page.get_by_test_id("stRadio").get_by_text("Analityka", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Analityka", exact=True).click()
         expect(page.get_by_test_id("stMetricValue").first).to_have_text(
             number(expected["trips"]), timeout=30000
         )
         assert not errors
+        assert not public_requests, public_requests
         assert page.get_by_test_id("stException").count() == 0
         assert page.get_by_test_id("stAlert").filter(has_text="Nie udało się").count() == 0
         (output / f"{kind}-browser.json").write_text(

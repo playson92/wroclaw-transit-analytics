@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path, PurePosixPath, PureWindowsPath
+from urllib.parse import urlsplit
 
 from ..gtfs.config import CATALOG_URL, DEFAULT_LIMITS, PROFILE, Limits, validate_url
 from ..gtfs.exceptions import GTFSError
@@ -52,6 +53,64 @@ def _verify_timestamp(value: object, field: str) -> None:
     parsed = datetime.fromisoformat(value)
     if parsed.utcoffset() != timedelta(0):
         raise PrepareError(f"{field} raw musi być czasem UTC z jawną strefą.")
+
+
+def validate_derivative(provenance: dict, sha256: str) -> None:
+    """Shared raw/silver admission: a derivative must retain honest original metadata."""
+    if provenance.get("data_kind") != "real_gtfs" or any(
+        provenance.get(field) is not None
+        for field in ("requested_url", "final_url", "catalog_url", "downloaded_at")
+    ):
+        raise PrepareError("Lokalna próbka nie może udawać oryginalnego pobrania HTTP.")
+    _verify_timestamp(provenance.get("generated_at"), "generated_at")
+    derivative = provenance.get("derivative_sample")
+    if not isinstance(derivative, dict) or derivative.get("sample_sha256") != sha256:
+        raise PrepareError("Próbka wymaga jawnego pochodzenia i zgodnego hash próbki.")
+    original = derivative.get("original")
+    if not isinstance(original, dict):
+        raise PrepareError("Brak metadanych oryginału próbki.")
+    for field in ("requested_url", "final_url"):
+        value = original.get(field)
+        if not isinstance(value, str):
+            raise PrepareError("URL oryginału próbki musi być tekstem.")
+        validate_url(value)
+    original_hash = original.get("sha256")
+    if (
+        original.get("catalog_url") != CATALOG_URL
+        or not isinstance(original_hash, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", original_hash)
+    ):
+        raise PrepareError("Niepoprawny katalog lub SHA-256 oryginału próbki.")
+    _verify_timestamp(original.get("downloaded_at"), "original.downloaded_at")
+    selection = derivative.get("selection")
+    license_info = derivative.get("license")
+    if (
+        not isinstance(selection, dict)
+        or not isinstance(selection.get("rule"), str)
+        or not selection["rule"].strip()
+        or not isinstance(license_info, dict)
+        or not isinstance(license_info.get("identifier"), str)
+        or not license_info["identifier"].strip()
+        or not isinstance(license_info.get("url"), str)
+        or not license_info["url"].startswith("https://")
+    ):
+        raise PrepareError("Próbka wymaga reguł wyboru oraz informacji licencyjnej.")
+    license_url = license_info["url"]
+    try:
+        parsed_license = urlsplit(license_url)
+        if (
+            parsed_license.scheme != "https"
+            or not parsed_license.hostname
+            or parsed_license.port not in (None, 443)
+            or parsed_license.username is not None
+            or parsed_license.password is not None
+            or parsed_license.fragment
+            or any(ord(character) <= 32 or ord(character) == 127 for character in license_url)
+            or "\\" in license_url
+        ):
+            raise ValueError
+    except ValueError:
+        raise PrepareError("Próbka wymaga poprawnego HTTPS URL licencji.") from None
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -158,6 +217,9 @@ def read_source(path: Path, limits: Limits = DEFAULT_LIMITS) -> RawSource:
                 raise PrepareError("Demo musi być syntetyczne i nie może udawać pobrania HTTP.")
             data_kind = "synthetic_demo"
             _verify_timestamp(manifest.get("generated_at"), "generated_at")
+        elif kind == "local_derivative":
+            validate_derivative(manifest, sha256)
+            data_kind = "real_gtfs"
         else:
             raise PrepareError(f"Nieobsługiwany source_kind: {kind!r}.")
         archive_path = _archive_path(manifest_path, manifest.get("archive_path"))
@@ -175,6 +237,8 @@ def read_source(path: Path, limits: Limits = DEFAULT_LIMITS) -> RawSource:
                 )
             },
         }
+        if kind == "local_derivative":
+            provenance["derivative_sample"] = manifest["derivative_sample"]
         source = RawSource(
             manifest_path,
             archive_path,

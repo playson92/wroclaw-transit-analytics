@@ -6,19 +6,37 @@
 $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = (Get-Location).Path }
 $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
-if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    throw 'Brak Docker CLI lub daemona. Uruchom istniejący Docker Desktop i ponów start demo.'
+$dockerCommand = Get-Command docker -ErrorAction SilentlyContinue
+$docker = if ($dockerCommand) { $dockerCommand.Source } else { $null }
+if (-not $docker) {
+    $candidates = @()
+    if ($env:LOCALAPPDATA) { $candidates += Join-Path $env:LOCALAPPDATA 'Programs\DockerDesktop\resources\bin\docker.exe' }
+    if ($env:ProgramFiles) { $candidates += Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin\docker.exe' }
+    $docker = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 }
-& docker info --format '{{.ServerVersion}}' 2>$null | Out-Null
+if (-not $docker) { throw 'Nie znaleziono Docker CLI. Sprawdź istniejący Docker Desktop.' }
+if ($env:DOCKER_HOST -and -not $env:DOCKER_CONTEXT) {
+    $endpoint = $env:DOCKER_HOST
+} else {
+    if ($env:DOCKER_CONTEXT) { $activeContext = $env:DOCKER_CONTEXT } else {
+        $activeContext = & $docker context show
+        if ($LASTEXITCODE -ne 0) { throw 'Nie można ustalić aktywnego kontekstu Dockera.' }
+    }
+    $endpoint = & $docker context inspect $activeContext --format '{{.Endpoints.docker.Host}}'
+    if ($LASTEXITCODE -ne 0) { throw 'Nie można sprawdzić aktywnego kontekstu Dockera.' }
+}
+if ($endpoint -notmatch '^(npipe:////\./pipe/|unix:///)' -or $endpoint -match '[\r\n]') { throw 'Aktywna konfiguracja Dockera jest zdalna; nie użyto jej.' }
+$engineKind = (& $docker info --format '{{.OSType}}' 2>$null) -join ''
 $nativeExit = $LASTEXITCODE
 if ($nativeExit -ne 0) { throw 'Brak Docker CLI lub daemona. Uruchom istniejący Docker Desktop i ponów start demo.' }
-& docker compose version --short | Out-Null
+if ($engineKind.Trim() -ne 'linux') { throw 'Demo wymaga lokalnego silnika Linux Dockera.' }
+& $docker compose version --short | Out-Null
 $nativeExit = $LASTEXITCODE
 if ($nativeExit -ne 0) { throw 'Brak działającego Docker Compose.' }
 $config = Join-Path $RepoRoot '.env.demo'
 if (-not (Test-Path -LiteralPath $config)) {
     # Refuse to invent credentials for an existing volume whose configuration was lost.
-    $volumes = & docker volume ls --filter 'label=com.docker.compose.project=wta-demo' --format '{{.Name}}'
+    $volumes = & $docker volume ls --filter 'label=com.docker.compose.project=wta-demo' --format '{{.Name}}'
     $nativeExit = $LASTEXITCODE
     if ($nativeExit -ne 0) { throw 'Nie można sprawdzić wolumenów demo.' }
     if ($volumes) { throw 'Istnieje wolumen wta-demo, ale brak .env.demo. Przywróć jego konfigurację; haseł nie zmieniono.' }
@@ -43,7 +61,7 @@ foreach ($key in @('POSTGRES_PORT','DASHBOARD_PORT','SILVER_DIR','POSTGRES_PASSW
 }
 function Invoke-DemoDocker {
     param([string[]]$Arguments)
-    & docker @composeArgs @Arguments
+    & $docker @composeArgs @Arguments
     $nativeExit = $LASTEXITCODE
     if ($nativeExit -ne 0) { throw "Etap Docker zakończony błędem ($nativeExit)." }
 }
@@ -56,13 +74,13 @@ try {
     $env:SILVER_DIR = $inputDir.Replace('\','/')
     foreach ($item in @(@('dashboard',$DashboardPort),@('postgres',$PostgresPort))) {
         $service = $item[0]
-        $serviceIds = & docker @composeArgs ps --status running -q $service
+        $serviceIds = & $docker @composeArgs ps --status running -q $service
         $nativeExit = $LASTEXITCODE
         if ($nativeExit -ne 0) { throw 'Nie można sprawdzić usług demo.' }
         $ownsPort = $false
         if ($serviceIds) {
             $containerPort = if ($service -eq 'postgres') { 5432 } else { 8501 }
-            $published = & docker @composeArgs port $service $containerPort
+            $published = & $docker @composeArgs port $service $containerPort
             $nativeExit = $LASTEXITCODE
             if ($nativeExit -ne 0) { throw 'Nie można sprawdzić portu usługi demo.' }
             $ownsPort = "$published" -match (':' + $item[1] + '$')

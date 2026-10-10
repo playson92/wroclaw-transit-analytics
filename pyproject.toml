@@ -34,6 +34,7 @@ where = ["src"]
 "wroclaw_transit_analytics.database" = ["sql/*.sql"]
 "wroclaw_transit_analytics.analytics" = ["sql/*.sql"]
 "wroclaw_transit_analytics.dashboard" = ["sql/*.sql", ".streamlit/config.toml"]
+"wroclaw_transit_analytics.portfolio" = ["assets/*.zip", "assets/*.json", "assets/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

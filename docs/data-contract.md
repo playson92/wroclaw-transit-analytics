@@ -18,6 +18,18 @@ Requested/final URLs obey the existing official-host policy; downloaded_at is UT
 The generator extends v1 with source_kind=local_synthetic, data_kind=synthetic_demo and generated_at UTC.
 Its requested_url, final_url, catalog_url and downloaded_at are null.
 
+The versioned portfolio subset uses `source_kind=local_derivative` and
+`data_kind=real_gtfs`: its rows come from an official archive, but its filtered ZIP
+is a new local artifact, not an original download. Top-level requested/final/catalog
+URLs and downloaded_at are null; generated_at is UTC. Top-level size_bytes and
+sha256 describe the derivative ZIP. `derivative_sample.sample_sha256` must match it.
+`derivative_sample.original` preserves the original official URLs, downloaded_at
+and SHA-256; selection, license and row_counts describe the subset. Admission
+verifies these original URL/hash/time fields and runs the same archive validator.
+Derivative provenance is retained in silver and PostgreSQL metadata, without
+editing or replacing historical manifests. See the [packaged sample manifest](../src/wroclaw_transit_analytics/portfolio/assets/manifest.json)
+and [reproduction script](../scripts/build_portfolio_sample.py).
+
 MODEL_VERSION is wta-silver-v1. Change it when transformation semantics change.
 The exact identity algorithm is:
 
@@ -64,7 +76,7 @@ Only _wta_source_record is physically nonnullable; DQ enforces other required va
 | calendar | service_id | service_id: string; seven weekday flags: int64; start_date/end_date: date32 |
 | calendar_dates | service_id + date | service_id: string; date: date32; exception_type: int64 |
 
-Every table retains _wta_source_record. dataset_id lives in the manifest; a future loader adds it to SQL keys.
+Every table retains _wta_source_record. dataset_id lives in the manifest; the transactional loader adds it to SQL keys.
 The static trips row count is not a daily count of trip instances.
 
 ### Values and defaults
@@ -146,7 +158,7 @@ Silver also records normalized_empty, added columns and the quality report path/
 
 content_sha256 hashes ordered schema name/type pairs, then each row as compact UTF-8 JSON with ISO dates,
 nulls and one newline per item. It includes _wta_source_record and is invariant to batch size/row groups.
-Physical SHA-256 protects exact Parquet bytes. Future loader fingerprints should use logical hashes and contract metadata
+Physical SHA-256 protects exact Parquet bytes. Loader fingerprints use logical hashes and contract metadata
 rather than classify a different physical row-group layout as a conflicting dataset.
 
 ## References and tested dependencies

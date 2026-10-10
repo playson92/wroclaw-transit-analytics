@@ -1,14 +1,22 @@
 # Dashboard, explorer i odczyt bazy
 
-Aplikacja 0.2.0 ma trzy widoki: **Mapa i linie** jako pierwszy ekran,
-**Analityka** oraz **Dane i jakość**. Explorer pokazuje rozkład wybranego snapshotu,
+Aplikacja ma cztery widoki we wspólnym pasku: **Mapa i kursy** jako pierwszy ekran,
+**Analityka**, **Dane** oraz **O projekcie**. Explorer pokazuje rozkład wybranego snapshotu,
 kursy, shapes i przystanki. Analityka czyta wersjonowane agregaty SQL gold.
-[Instrukcja startera i wyboru danych](transit-explorer.md) jest wspólnym punktem wejścia.
+[Publiczne demo z jedną komendą Compose](../README.md#quick-start-from-a-fresh-download)
+jest punktem wejścia bez hostowego Pythona i `.env`.
+[Instrukcja startera i pełnych danych](transit-explorer.md) opisuje odrębny zachowany tryb.
 
 ## Uruchomienie
 
 Docker z lokalnym silnikiem Linux i Compose; obraz zawiera Python 3.12 oraz
 Streamlit 1.57. Podstawowy pakiet i CLI `--help` nie wymagają Streamlita ani bazy.
+
+Publiczne demo uruchamia `docker compose -f compose.demo.yaml up --build -d --wait`.
+Autonomiczny projekt `wta-portfolio` używa pakowanej pochodnej próbki GTFS, własnych
+trwałych poświadczeń i wolumenów, bez opublikowanego portu bazy. Inicjalizacja,
+załadowanie, analiza i geometria kończą się przed startem UI na 127.0.0.1:8504.
+Polecenia PowerShell poniżej są zachowaną ścieżką dla innych projektów i pełnego feedu.
 
 ```powershell
 & .\scripts\start-explorer.ps1
@@ -79,8 +87,9 @@ Median/p90 są dzienne i kierunkowe; nie uśrednia się median ani dziennych DIS
 Mianownik 0 daje wartość nieokreśloną. Poza obwiednią NULL oznacza brak wiedzy,
 a zero w pokrytym dniu oznacza zero według reguł analizy.
 
-Dane i jakość oddziela pobranie, import, analizę, statyczne silver i pokrycie aktywnych
-dni gold. Demo ma stałą etykietę syntetyczności. Historyczny snapshot nie jest
+Dane oddziela pobranie, import, analizę, statyczne silver i pokrycie aktywnych
+dni gold. Syntetyczne D1/D2 ma stałą etykietę syntetyczności; portfolio ma stałą
+etykietę próbki archiwalnego rozkładu wybranych linii. Historyczny snapshot nie jest
 obietnicą aktualnego rozkładu. Eksperymentalne CUI jest domyślnie wyłączone;
 punktualność, pasażerowie i ukończony live GPS pozostają poza wydaniem.
 

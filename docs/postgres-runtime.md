@@ -9,6 +9,12 @@ Obraz aplikacji używa `python:3.12-slim`. CI zapisuje odczytane RepoDigests obr
 w artefaktach `postgres-evidence-*` i `compose-evidence-*` razem z testowanym SHA.
 Status konkretnego runu i platform znajduje się w jego review bundle.
 
+Do publicznego portfolio demo użyj autonomicznego `compose.demo.yaml`:
+[jedna komenda, bez `.env` i hostowego Pythona](../README.md#quick-start-from-a-fresh-download).
+Demo zawiera wersjonowaną pochodną próbkę, tworzy losowe trwałe poświadczenia
+i nie publikuje portu PostgreSQL. Poniższy `compose.yaml` oraz ręczne polecenia
+pozostają dla pełnych danych i diagnostyki; nie są wymagane do publicznego demo.
+
 ## Model i relacje
 
 Każda tabela silver ma `dataset_id` w PK i FK. Nie miesza rekordów dwóch feedów.
@@ -182,9 +188,10 @@ wyłącznie zasobów testowych. Każdy przypadek tworzy i usuwa własną bazę o
 Brak DSN lokalnie jest jawnym skip; CI ustawia WTA_REQUIRE_INTEGRATION=1 i brak DSN,
 błąd połączenia lub jakikolwiek skip to FAIL. Nigdy nie używa DATABASE_URL jako fallback.
 
-CI ma trzy niezależne joby: jakość/offline, realny PostgreSQL 17, build/Compose.
-Compose smoke sprawdza non-root, CLI, role, idempotencję i restart named volume.
-Repozytorium nie wysyła prawdziwych Parquet/ZIP do CI.
+CI ma niezależne sprawdzenia jakości/offline, realnego PostgreSQL 17, Compose/browser
+i przenośnego demo dla natywnych Linux AMD64 oraz ARM64. Compose smoke sprawdza
+non-root, CLI, role, idempotencję i restart named volume. Mała publiczna pochodna
+próbka ZIP jest zasobem repozytorium/obrazu; pełny raw i wygenerowane Parquet nie są publikowane.
 
 Sprawdzone oficjalne źródła implementacji:
 [Psycopg COPY](https://www.psycopg.org/psycopg3/docs/basic/copy.html),

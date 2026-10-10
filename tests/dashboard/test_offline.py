@@ -3,6 +3,7 @@ import subprocess
 import sys
 from datetime import date
 from importlib.resources import files
+from pathlib import Path
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -206,14 +207,51 @@ def app():
     return at.run()
 
 
+def test_app_favicon_is_marshaled_as_local_svg_without_external_resources(fake_data, monkeypatch):
+    import base64
+    from types import SimpleNamespace
+    from xml.etree import ElementTree
+
+    from streamlit.commands import page_config
+
+    messages = []
+    get_context = page_config.get_script_run_ctx
+
+    def capture_context():
+        context = get_context()
+
+        def enqueue(message):
+            messages.append(message)
+            context.enqueue(message)
+
+        return SimpleNamespace(enqueue=enqueue)
+
+    monkeypatch.setattr(page_config, "get_script_run_ctx", capture_context)
+    at = app()
+    assert not at.exception and not at.error
+    icons = [
+        message.page_config_changed.favicon
+        for message in messages
+        if message.WhichOneof("type") == "page_config_changed"
+    ]
+    assert len(icons) == 1 and icons[0].startswith("data:image/svg+xml;base64,")
+    svg = ElementTree.fromstring(base64.b64decode(icons[0].split(",", 1)[1]))
+    assert svg.tag == "{http://www.w3.org/2000/svg}svg"
+    assert not any(
+        attribute.endswith(("href", "src"))
+        for element in svg.iter()
+        for attribute in element.attrib
+    )
+
+
 def test_three_views_dependent_filters_and_null_direction(fake_data):
     _, calls = fake_data
     at = app()
     assert not at.exception and not at.error
-    assert any("SYNTETYCZNE" in w.value for w in at.warning)
+    assert any("SYNTETYCZNE" in w.value for w in at.caption)
     assert at.metric[0].value == "17"
     assert at.metric[1].value == "Brak danych"
-    at.radio(key="analytics_view").set_value("Linia / punkt zatrzymania").run()
+    at.segmented_control(key="analytics_view").set_value("Linia / punkt zatrzymania").run()
     assert at.selectbox(key="filter_stop").value == "0001"
     assert at.selectbox(key="filter_direction").options == [
         "Wszystkie kierunki",
@@ -230,7 +268,7 @@ def test_three_views_dependent_filters_and_null_direction(fake_data):
     assert at.selectbox(key="filter_direction").value == "ALL"
     at.selectbox(key="filter_route").set_value("002").run()
     assert at.selectbox(key="filter_stop").value == "0001"
-    at.radio(key="view").set_value("Dane i jakość").run()
+    at.segmented_control(key="view").set_value("Dane").run()
     assert not at.exception and not at.error
     assert any("Lokalny generator" in t.value for t in at.text)
 
@@ -316,3 +354,24 @@ def test_server_limit_is_an_error_not_a_truncated_result():
 
     with pytest.raises(data.DashboardError, match="limit"):
         data.rows(Connection(), "SELECT 1", limit=2)
+
+
+def test_installed_launcher_uses_packaged_theme_from_any_working_directory(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from wroclaw_transit_analytics.dashboard import launcher
+
+    calls = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        launcher.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append((command, kwargs)) or SimpleNamespace(returncode=0),
+    )
+    assert launcher.launch(port=8504) == 0
+    command, options = calls[0]
+    assert "--server.port=8504" in command
+    theme = options["cwd"] / ".streamlit" / "config.toml"
+    assert theme.is_file()
+    assert "primaryColor" in theme.read_text(encoding="utf-8")
+    assert Path.cwd() == tmp_path

@@ -1,7 +1,19 @@
 [theme]
 base = "light"
-primaryColor = "#0f766e"
-backgroundColor = "#f8fafc"
-secondaryBackgroundColor = "#e8f0f2"
-textColor = "#172a3a"
-font = "sans serif"
+primaryColor = "#087f83"
+backgroundColor = "#f4f7fa"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#12304c"
+font = "'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+headingFont = "'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
+baseFontSize = 16
+headingFontSizes = ["28px", "24px", "19px", "16px", "14px", "12px"]
+headingFontWeights = [650, 650, 600, 600, 600, 600]
+borderColor = "#dce4ed"
+baseRadius = "10px"
+buttonRadius = "8px"
+showWidgetBorder = true
+dataframeHeaderBackgroundColor = "#edf2f7"
+dataframeBorderColor = "#dce4ed"
+chartCategoricalColors = ["#087f83", "#12304c", "#c86a0c", "#697f95"]
+linkColor = "#087f83"

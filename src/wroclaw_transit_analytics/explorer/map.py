@@ -19,6 +19,7 @@ OSM_STYLE = {
     },
     "layers": [{"id": "osm", "type": "raster", "source": "osm", "minzoom": 0, "maxzoom": 19}],
 }
+EMPTY_STYLE = {"version": 8, "sources": {}, "layers": []}
 
 
 def stop_markers(visits, selected):
@@ -104,8 +105,11 @@ def deck(visits, geometry, selected, basemap=True, vehicles=()):
     return pdk.Deck(
         layers=layers,
         initial_view_state=view,
-        map_provider="mapbox" if basemap else None,
+        map_provider="mapbox",
         # Streamlit 1.57 expects a style URL string, although Pydeck accepts a dict.
-        map_style="data:application/json," + quote(json.dumps(OSM_STYLE)) if basemap else None,
+        # None selects Streamlit's default CARTO tiles; OFF needs an explicit
+        # local empty style so no provider or public raster is requested.
+        map_style="data:application/json,"
+        + quote(json.dumps(OSM_STYLE if basemap else EMPTY_STYLE)),
         tooltip={"text": "{label}"},
     )

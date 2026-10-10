@@ -256,3 +256,141 @@ jobs:
           name: compose-evidence-${{ github.run_id }}
           path: evidence/
           if-no-files-found: error
+
+  portfolio:
+    name: Portable demo · native ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+            machine: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            machine: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: wta-portfolio-ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
+      WTA_PORTFOLIO_URL: http://127.0.0.1:8504
+      WTA_PORTFOLIO_EXPECTED: evidence/portfolio-first.json
+      WTA_PORTFOLIO_EVIDENCE: evidence/portfolio-browser
+      WTA_REQUIRE_PORTFOLIO_BROWSER: "1"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python for acceptance tests
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: .python-version
+      - name: Install browser acceptance tools
+        run: |
+          python -m pip install -c constraints.txt -e '.[dev,dashboard,ui-test]'
+          python -m playwright install --with-deps chromium
+      - name: Export the exact commit without author files or Git metadata
+        run: |
+          mkdir -p evidence
+          echo "$GITHUB_SHA" > evidence/tested-sha.txt
+          fresh_directory="$RUNNER_TEMP/Portfolio fresh source"
+          mkdir "$fresh_directory"
+          # Git archive exports only versioned files at the tested commit.
+          git archive "$GITHUB_SHA" | tar -x -C "$fresh_directory"
+          test ! -e "$fresh_directory/.git"
+          test ! -e "$fresh_directory/.env"
+          test ! -e "$fresh_directory/.venv"
+          # The repository tracks only a .gitkeep scaffold here, never author data.
+          if [ -d "$fresh_directory/data/raw" ]; then
+            test -z "$(find "$fresh_directory/data/raw" -type f ! -name .gitkeep -print -quit)"
+          fi
+          test ! -e "$fresh_directory/output"
+          echo "PORTFOLIO_SOURCE=$fresh_directory" >> "$GITHUB_ENV"
+          uname -m | tee evidence/host-machine.txt
+          test "$(uname -m)" = '${{ matrix.machine }}'
+          docker version > evidence/docker-version.txt
+          docker compose version > evidence/compose-version.txt
+      - name: Run the documented command in the fresh source directory
+        run: |
+          cd "$PORTFOLIO_SOURCE"
+          docker compose -f compose.demo.yaml config --format json > "$GITHUB_WORKSPACE/evidence/compose-resolved.json"
+          docker compose -f compose.demo.yaml up --build -d --wait 2>&1 | tee "$GITHUB_WORKSPACE/evidence/fresh-start.log"
+          docker compose -f compose.demo.yaml ps --all --format json > "$GITHUB_WORKSPACE/evidence/services-first.json"
+          docker image inspect wta-portfolio-app postgres:17 --format '{"id":"{{.Id}}","architecture":"{{.Architecture}}","os":"{{.Os}}","repo_digests":{{json .RepoDigests}}}' > "$GITHUB_WORKSPACE/evidence/native-images.jsonl"
+          # BuildKit need not load its base image into the daemon's local tags.
+          docker buildx imagetools inspect python:3.12-slim > "$GITHUB_WORKSPACE/evidence/python-base-manifest.txt"
+          docker compose -f compose.demo.yaml exec -T dashboard python -m pip check > "$GITHUB_WORKSPACE/evidence/dependency-check.txt"
+          docker compose -f compose.demo.yaml exec -T dashboard python -m pip freeze > "$GITHUB_WORKSPACE/evidence/installed-dependencies.txt"
+          docker compose -f compose.demo.yaml exec -T dashboard python /app/scripts/portfolio_verify.py --credential-file /run/secrets/reader/password > "$GITHUB_WORKSPACE/evidence/portfolio-first.json"
+      - name: Verify actual native runtime, packaged data, privileges and network scope
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          proof = json.loads(Path('evidence/portfolio-first.json').read_text())
+          assert proof['status'] == 'PASSED'
+          assert proof['native_runtime']['machine'] == '${{ matrix.machine }}'
+          assert proof['native_runtime']['uid'] == 10001
+          config = json.loads(Path('evidence/compose-resolved.json').read_text())
+          assert not config['services']['postgres'].get('ports')
+          assert all(p['host_ip'] == '127.0.0.1' for p in config['services']['dashboard']['ports'])
+          assert proof['default']['shape_points'] > 0 and proof['late']['end_seconds'] >= 86400
+          print('Native imports, real prepare/load/analyze/shapes, reader grants and loopback-only dashboard PASS')
+          PY
+      - name: Verify the real UI with local map fixtures
+        run: >-
+          python -m pytest tests/ui/test_portfolio_browser.py -m browser
+          --basetemp "$RUNNER_TEMP/portfolio-browser-${{ matrix.arch }}"
+          --junitxml=evidence/portfolio-browser-tests.xml
+      - name: Repeat the exact command and restart without deleting volumes
+        run: |
+          cd "$PORTFOLIO_SOURCE"
+          docker compose -f compose.demo.yaml up --build -d --wait 2>&1 | tee "$GITHUB_WORKSPACE/evidence/repeat-start.log"
+          docker compose -f compose.demo.yaml exec -T dashboard python /app/scripts/portfolio_verify.py --credential-file /run/secrets/reader/password > "$GITHUB_WORKSPACE/evidence/portfolio-repeat.json"
+          docker compose -f compose.demo.yaml restart postgres dashboard
+          docker compose -f compose.demo.yaml up --build -d --wait 2>&1 | tee "$GITHUB_WORKSPACE/evidence/restart-start.log"
+          docker compose -f compose.demo.yaml exec -T dashboard python /app/scripts/portfolio_verify.py --credential-file /run/secrets/reader/password > "$GITHUB_WORKSPACE/evidence/portfolio-restart.json"
+      - name: Confirm persistence and execute the UI after restart
+        env:
+          WTA_PORTFOLIO_EVIDENCE: evidence/portfolio-browser-after-restart
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          reports = [json.loads(Path(f'evidence/portfolio-{stage}.json').read_text()) for stage in ('first','repeat','restart')]
+          for current in reports[1:]:
+              assert current == reports[0], 'Dataset, analysis, shapes, calendar, KPIs and reader must persist exactly'
+          print('Repeat and restart preserve the complete isolated sample and authenticated reader')
+          PY
+          python -m pytest tests/ui/test_portfolio_browser.py -m browser --basetemp "$RUNNER_TEMP/portfolio-browser-restart-${{ matrix.arch }}" --junitxml=evidence/portfolio-browser-restart-tests.xml
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          for name in ('portfolio-browser-tests.xml','portfolio-browser-restart-tests.xml'):
+              root = ET.parse('evidence/' + name).getroot()
+              assert root.findall('.//testcase'), 'Actual portfolio browser tests must execute'
+              assert not root.findall('.//skipped') and not root.findall('.//failure') and not root.findall('.//error')
+          PY
+      - name: Reject a preserved database with missing matching credentials
+        run: |
+          cd "$PORTFOLIO_SOURCE"
+          if docker compose -f compose.demo.yaml run --rm --no-deps -v "${COMPOSE_PROJECT_NAME}_missing_reader:/run/secrets/reader" config > "$GITHUB_WORKSPACE/evidence/missing-credentials-guard.log" 2>&1; then
+            echo 'Configuration loss must fail rather than regenerate passwords'
+            exit 1
+          fi
+          grep -q DEMO_CONFIG_LOST "$GITHUB_WORKSPACE/evidence/missing-credentials-guard.log"
+          docker compose -f compose.demo.yaml exec -T dashboard python /app/scripts/portfolio_verify.py --credential-file /run/secrets/reader/password > "$GITHUB_WORKSPACE/evidence/portfolio-after-config-guard.json"
+          cmp "$GITHUB_WORKSPACE/evidence/portfolio-first.json" "$GITHUB_WORKSPACE/evidence/portfolio-after-config-guard.json"
+      - name: Retain useful logs and stop only this test project
+        if: always()
+        run: |
+          if [ -n "${PORTFOLIO_SOURCE:-}" ]; then
+            cd "$PORTFOLIO_SOURCE"
+            docker compose -f compose.demo.yaml logs --no-color --tail 80 > "$GITHUB_WORKSPACE/evidence/services.log" 2>&1 || true
+            docker compose -f compose.demo.yaml stop
+          fi
+      - name: Save native architecture acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portfolio-${{ matrix.arch }}-evidence-${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: error
