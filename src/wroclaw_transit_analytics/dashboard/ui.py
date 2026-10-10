@@ -319,7 +319,7 @@ def quality(result):
 
 def main():
     st.set_page_config(
-        page_title="Wrocław Transit Analytics", page_icon=":material/tram:", layout="wide"
+        page_title="Wrocław Transit Analytics", page_icon=presentation.FAVICON_SVG, layout="wide"
     )
     presentation.style()
     with st.container(key="portfolio_header"):

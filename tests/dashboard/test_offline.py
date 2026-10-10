@@ -207,6 +207,43 @@ def app():
     return at.run()
 
 
+def test_app_favicon_is_marshaled_as_local_svg_without_external_resources(fake_data, monkeypatch):
+    import base64
+    from types import SimpleNamespace
+    from xml.etree import ElementTree
+
+    from streamlit.commands import page_config
+
+    messages = []
+    get_context = page_config.get_script_run_ctx
+
+    def capture_context():
+        context = get_context()
+
+        def enqueue(message):
+            messages.append(message)
+            context.enqueue(message)
+
+        return SimpleNamespace(enqueue=enqueue)
+
+    monkeypatch.setattr(page_config, "get_script_run_ctx", capture_context)
+    at = app()
+    assert not at.exception and not at.error
+    icons = [
+        message.page_config_changed.favicon
+        for message in messages
+        if message.WhichOneof("type") == "page_config_changed"
+    ]
+    assert len(icons) == 1 and icons[0].startswith("data:image/svg+xml;base64,")
+    svg = ElementTree.fromstring(base64.b64decode(icons[0].split(",", 1)[1]))
+    assert svg.tag == "{http://www.w3.org/2000/svg}svg"
+    assert not any(
+        attribute.endswith(("href", "src"))
+        for element in svg.iter()
+        for attribute in element.attrib
+    )
+
+
 def test_three_views_dependent_filters_and_null_direction(fake_data):
     _, calls = fake_data
     at = app()

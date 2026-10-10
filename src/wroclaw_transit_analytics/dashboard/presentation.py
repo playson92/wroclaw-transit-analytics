@@ -9,6 +9,15 @@ from .formatting import service_time
 
 SAMPLE_NOTICE = "Próbka archiwalnego rozkładu — wybrane linie, nie cała sieć"
 REPOSITORY = "https://github.com/playson92/wroclaw-transit-analytics"
+FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<rect width="32" height="32" rx="7" fill="#12304c"/>
+<path d="m9 28 4-6m10 6-4-6" stroke="#fff" stroke-width="2"/>
+<rect x="7" y="4" width="18" height="21" rx="5" fill="#008c95"/>
+<rect x="10" y="8" width="12" height="9" rx="2" fill="#12304c"/>
+<path d="M16 8v9" stroke="#008c95" stroke-width="2"/>
+<circle cx="11" cy="21" r="1.5" fill="#fff"/>
+<circle cx="21" cy="21" r="1.5" fill="#fff"/>
+</svg>"""
 
 # Native config.toml supplies widget colors, borders, and typography. These rules
 # arrange our own cards and named containers; they never target generated classes.
