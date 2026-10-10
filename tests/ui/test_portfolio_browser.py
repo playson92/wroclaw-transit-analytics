@@ -262,7 +262,11 @@ def test_portfolio_real_sample_course_views_filters_mobile_and_reload():
         settled(page)
         navigate(page, "Przystanek")
         expect(page.get_by_role("heading", name="Odjazdy z wybranego przystanku")).to_be_visible()
-        expect(page.get_by_test_id("stDataFrame")).to_be_visible()
+        # Streamlit may retain the preceding course's collapsed full table
+        # during widget cleanup. Assert the one table actually shown for this stop.
+        departures_table = page.get_by_test_id("stDataFrame").filter(visible=True)
+        expect(departures_table).to_have_count(1)
+        expect(departures_table).to_be_visible()
         page.screenshot(path=str(output / "portfolio-stop-departures.png"), full_page=True)
         navigate(page, "Kurs")
         # Canvas selection is independent from the dropdown selection.
