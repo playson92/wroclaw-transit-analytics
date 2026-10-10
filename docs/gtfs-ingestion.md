@@ -177,6 +177,7 @@ tests remain. The live official-source smoke test is a separate manual CLI run,
 never part of pytest or CI. Reports record its exact URL and result; offline tests
 alone do not prove current portal availability.
 
-Next work: review and publish this ingestion change, then design parsing and cleaned
-analytical datasets from completed `passed` runs. Bronze/silver/gold, PostgreSQL,
-Docker Compose, dashboard and cloud remain later project stages.
+Completed `passed` runs are now admitted by [preparation](prepare.md), then the
+[transactional PostgreSQL loader](postgres-runtime.md), [SQL analytics](metrics.md)
+and [dashboard/explorer](dashboard.md). The packaged [portfolio demo](../README.md#quick-start-from-a-fresh-download)
+uses this same pipeline without a new source download. Cloud deployment remains outside the project scope.

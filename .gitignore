@@ -67,6 +67,8 @@ docker-compose.override.yml
 
 # Temporary files
 output/codex_runs/
+output/portfolio-sample-prepare/
+output/portfolio-wheel-check/
 *.tmp
 *.temp
 ~$*

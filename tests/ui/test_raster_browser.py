@@ -67,7 +67,7 @@ def test_enabled_raster_demo_pixels_markers_and_stop_selection():
         page.route("https://tile.openstreetmap.org/**", serve_tile)
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(url)
-        expect(page.get_by_role("heading", name="Mapa i linie", exact=True)).to_be_visible(
+        expect(page.get_by_role("heading", name="Mapa i kursy", exact=True)).to_be_visible(
             timeout=60000
         )
         select_dataset(page, expected["dataset_id"])

@@ -27,6 +27,10 @@ def launch(port=8501, address="127.0.0.1"):
                 "--server.headless=true",
                 "--browser.gatherUsageStats=false",
                 "--client.showErrorDetails=false",
+                "--client.toolbarMode=minimal",
                 "--server.fileWatcherType=none",
-            ]
+            ],
+            # Streamlit reads its official project theme from cwd/.streamlit.
+            # Only this child process changes directory, not the user's shell.
+            cwd=path.parent,
         ).returncode

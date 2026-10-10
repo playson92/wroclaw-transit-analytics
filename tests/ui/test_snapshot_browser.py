@@ -86,7 +86,7 @@ def test_disjoint_snapshots_visible_day_sql_course_filters_views_and_reload():
 
         page.route("https://open-data.cui.wroclaw.pl/**", reject_cui)
         page.goto(url)
-        expect(page.get_by_role("heading", name="Mapa i linie", exact=True)).to_be_visible(
+        expect(page.get_by_role("heading", name="Mapa i kursy", exact=True)).to_be_visible(
             timeout=60000
         )
         select_dataset(page, a["dataset_id"])
@@ -110,15 +110,17 @@ def test_disjoint_snapshots_visible_day_sql_course_filters_views_and_reload():
             "aria-label", re.compile("Selected Wszystkie"), timeout=30000
         )
         expect(search).to_have_value("")
+        page.get_by_text("Eksperymentalne źródło CUI", exact=True).click()
         expect(
             page.get_by_test_id("stCheckbox")
             .filter(has=page.get_by_text("Obserwacje pojazdów z CUI", exact=True))
             .get_by_role("checkbox")
         ).not_to_be_checked()
+        page.get_by_text("Eksperymentalne źródło CUI", exact=True).click()
         b_initial = expected_initial(b)
         assert_day_and_course(page, b, b_initial)
         choose(page, "Przystanek", re.compile("stop_id=NA$"))
-        page.get_by_test_id("stRadio").get_by_text("Przystanek", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Przystanek", exact=True).click()
         expect(page.get_by_text("B Demo Plac · stop_id=NA", exact=True)).to_be_visible(
             timeout=30000
         )
@@ -130,14 +132,14 @@ def test_disjoint_snapshots_visible_day_sql_course_filters_views_and_reload():
 
         select_service_day(page, "2026-10-01")
         choose(page, "Linia", re.compile("^D2 ·"))
-        page.get_by_test_id("stRadio").get_by_text("Kurs", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Kurs", exact=True).click()
         assert_day_and_course(page, b, "2026-10-01")
         expect(
             page.get_by_text("Początek: 23:50:00 · koniec: 25:10:00", exact=True)
         ).to_be_visible()
         choose(page, "Przystanek", re.compile("stop_id=NA$"))
-        for view in ("Analityka", "Dane i jakość", "Mapa i linie"):
-            page.get_by_test_id("stRadio").get_by_text(view, exact=True).click()
+        for view in ("Analityka", "Dane", "O projekcie", "Mapa i kursy"):
+            page.get_by_test_id("stButtonGroup").get_by_text(view, exact=True).click()
             heading = "Przegląd sieci" if view == "Analityka" else view
             expect(page.get_by_role("heading", name=heading, exact=True)).to_be_visible(
                 timeout=30000
@@ -150,11 +152,11 @@ def test_disjoint_snapshots_visible_day_sql_course_filters_views_and_reload():
         page.screenshot(path=str(output / "snapshot-B-after-views.png"), full_page=True)
 
         # Dataset changes also reset hidden map filters while the user stays in analytics.
-        page.get_by_test_id("stRadio").get_by_text("Analityka", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Analityka", exact=True).click()
         expect(page.get_by_role("heading", name="Przegląd sieci", exact=True)).to_be_visible()
         select_dataset(page, a["dataset_id"])
         select_dataset(page, b["dataset_id"])
-        page.get_by_test_id("stRadio").get_by_text("Mapa i linie", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Mapa i kursy", exact=True).click()
         assert_day_and_course(page, b, b_initial)
         expect(control(page, "Rodzaj transportu")).to_have_attribute(
             "aria-label", re.compile("Selected Wszystkie")
@@ -177,12 +179,12 @@ def test_disjoint_snapshots_visible_day_sql_course_filters_views_and_reload():
         a_initial = expected_initial(a)
         assert_day_and_course(page, a, a_initial)
         choose(page, "Przystanek", re.compile("stop_id=NA$"))
-        page.get_by_test_id("stRadio").get_by_text("Przystanek", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Przystanek", exact=True).click()
         expect(page.get_by_text("A Demo Plac · stop_id=NA", exact=True)).to_be_visible(
             timeout=30000
         )
         page.reload()
-        expect(page.get_by_role("heading", name="Mapa i linie", exact=True)).to_be_visible(
+        expect(page.get_by_role("heading", name="Mapa i kursy", exact=True)).to_be_visible(
             timeout=60000
         )
         select_dataset(page, b["dataset_id"])

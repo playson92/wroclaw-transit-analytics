@@ -1,5 +1,11 @@
 # Wrocław Transit Analytics — studium projektu 0.2.0
 
+To studium dotyczy **całego historycznego archiwum** i zachowuje jego wyniki SQL.
+Publiczne [portfolio demo](../README.md#quick-start-from-a-fresh-download) jest odrębną,
+małą pochodną próbką linii 1, 10, 100 i 106. Nie przenosi poniższych liczników całej
+sieci do próbki. Screenshot poniżej przedstawia wcześniejszy odbiór pełnego archiwum;
+nowy ekran i rzeczywiste nagranie są w [README](../README.md).
+
 Problem: statyczny GTFS ma miliony wizyt przystanków, lecz sam katalog trips nie mówi,
 ile kursów jest aktywnych w wybranym dniu ani którędy jedzie konkretny wariant.
 Projekt zamienia jawny ZIP w sprawdzalne dane SQL i lokalny ekran rozkładu:
@@ -7,7 +13,7 @@ mapę, linie, kursy, odjazdy oraz analitykę. Nie mierzy realizacji przewozu ani
 
 ![Rzeczywiste ulice i rozkładowa trasa historycznego snapshotu](assets/explorer-map.png)
 
-To ekran aktualnej aplikacji na historycznym GTFS i rzeczywistym podkładzie OSM.
+To historyczny ekran aplikacji na pełnym archiwalnym GTFS i rzeczywistym podkładzie OSM.
 Syntetyczny raster używany w testach technicznych nie jest tym obrazem.
 
 ## Przepływ i decyzje techniczne

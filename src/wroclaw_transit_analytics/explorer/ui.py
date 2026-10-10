@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from ..dashboard.formatting import service_time
+from ..dashboard.presentation import route_card, visit_list
 from . import data, positions
 from .map import deck
 
@@ -35,7 +36,15 @@ def select_snapshot(source, dataset):
     if reset_dependency(
         "explorer_dataset_dep",
         (source, dataset),
-        ("explorer_day", "explorer_route", "explorer_variant", "explorer_trip", "explorer_stop"),
+        (
+            "explorer_day",
+            "explorer_route",
+            "explorer_variant",
+            "explorer_trip",
+            "explorer_stop",
+            "explorer_marker_selection",
+            "explorer_marker_revision",
+        ),
     ):
         st.session_state["explorer_mode"] = "Wszystkie"
         st.session_state["explorer_search"] = ""
@@ -45,6 +54,10 @@ def select_snapshot(source, dataset):
 
 def remember_day(widget_key):
     st.session_state["explorer_day"] = st.session_state[widget_key]
+
+
+def remember_detail(widget_key):
+    st.session_state["explorer_detail"] = st.session_state[widget_key]
 
 
 @st.cache_data(ttl=60, max_entries=128, show_spinner=False)
@@ -109,9 +122,23 @@ def ensure_choice(key, options, default=None):
 def select_marker(map_key, allowed):
     selection = st.session_state.get(map_key, {}).get("selection", {}).get("objects", {})
     selected = selection.get("stops", [])
-    if selected and selected[0].get("stop_id") in allowed:
-        st.session_state["explorer_stop"] = selected[0]["stop_id"]
-        st.session_state["explorer_detail"] = "Przystanek"
+    if not selected:
+        st.session_state["explorer_marker_selection"] = None
+        return
+    stop = selected[0].get("stop_id")
+    if stop not in allowed:
+        return
+    # Pydeck can send the same selected object again when its color/radius
+    # changes. That presentation update must not override a later tab choice.
+    selection = (map_key, stop)
+    if st.session_state.get("explorer_marker_selection") == selection:
+        return
+    st.session_state["explorer_marker_selection"] = selection
+    st.session_state["explorer_marker_revision"] = (
+        st.session_state.get("explorer_marker_revision", 0) + 1
+    )
+    st.session_state["explorer_stop"] = stop
+    st.session_state["explorer_detail"] = "Przystanek"
 
 
 def timetable(records):
@@ -163,24 +190,8 @@ def vehicle_status(result):
 
 
 def render(source, dataset):
-    st.header("Mapa i linie")
-    st.caption("Mapa wybranego kursu rozkładowego — nie pozycja GPS pojazdu.")
+    st.header("Mapa i kursy", anchor=False)
     info = metadata(source, dataset)
-    provenance = info["provenance"]
-    if info["data_kind"] == "real_gtfs":
-        st.caption(
-            f"Historyczny snapshot GTFS · kalendarz: {info['start_date']} — {info['end_date']}. Aktualność względem dzisiejszego rozkładu niepotwierdzona."
-        )
-    else:
-        st.caption("Rozkład z generatora demo, bez rzeczywistych pojazdów.")
-    with st.expander("Pochodzenie i szczegóły snapshotu"):
-        st.text(f"dataset_id: {dataset}")
-        st.text(f"SHA-256 źródła: {info['source_sha256']}")
-        st.write(
-            "Pobranie UTC:", provenance.get("downloaded_at") or "Nie dotyczy / brak metadanych"
-        )
-        if url := provenance.get("final_url"):
-            st.markdown(f"[Źródło snapshotu]({url})")
     if not info["capabilities"].get("quantitative_gold_supported", False):
         st.warning(
             "Ten snapshot zawiera nieobsługiwane usługi częstotliwościowe/flex. Nie pokazujemy ich jako kompletnych kursów rozkładowych."
@@ -190,9 +201,12 @@ def render(source, dataset):
     if not all_routes or not info["start_date"]:
         st.info("Brak katalogu linii lub kalendarza.")
         return
-    controls, canvas = st.columns([1, 3], gap="large")
+    with st.container(key="explorer_layout"):
+        controls, canvas = st.columns([1, 3], gap="medium")
     with controls:
-        st.subheader("Wybierz przejazd")
+        controls_content = st.container(border=True, key="explorer_controls")
+    with controls_content:
+        st.subheader("Wybierz przejazd", anchor=False)
         select_snapshot(source, dataset)
         # A historical snapshot starts at its first recorded day, independently of today.
         # Later user choices, including valid days without service, remain untouched.
@@ -259,7 +273,6 @@ def render(source, dataset):
             st.info("Wybierz linię, aby wyświetlić jej kursy.")
             return
         selected_route = routes[route]
-        st.caption(f"{selected_route['route_long_name']} · {selected_route['agency_name']}")
         variants = fetch(source, "variants", dataset, day, route)
         reset_dependency(
             "explorer_variant_dep",
@@ -334,20 +347,29 @@ def render(source, dataset):
             st.info("Wybierz przystanek, aby wyświetlić mapę i odjazdy.")
             return
         basemap = st.toggle("Podkład OpenStreetMap", value=True, key="explorer_basemap")
-        show_vehicles = st.toggle("Obserwacje pojazdów z CUI", key="explorer_vehicles")
-        st.caption(
-            "Eksperyment CUI: osobne obserwacje z niepotwierdzonym czasem, bez potwierdzenia pozycji live."
-        )
-        if show_vehicles:
-            st.button(
-                "Odśwież pozycje",
-                key="positions_refresh",
-                help="Wspólny limit źródła: jedna próba na godzinę.",
-            )
+        with st.expander("Eksperymentalne źródło CUI"):
+            show_vehicles = st.toggle("Obserwacje pojazdów z CUI", key="explorer_vehicles")
+            st.caption("Osobny eksport o niepotwierdzonym czasie. To nie jest live GPS.")
+            if show_vehicles:
+                st.button(
+                    "Odśwież pozycje", key="positions_refresh", help="Jedna próba na godzinę."
+                )
     geometry = fetch(source, "geometry", dataset, day, route, variant, trip)
     observations = positions.normalize(positions.snapshot()) if show_vehicles else None
     vehicles = []
     with canvas:
+        canvas_content = st.container(key="explorer_canvas")
+    with canvas_content:
+        chosen = by_trip[trip]
+        route_card(
+            selected_route,
+            chosen["trip_headsign"],
+            transport(selected_route["route_type"]),
+            (chosen["start_seconds"], chosen["end_seconds"], len(visits)),
+        )
+        st.caption(
+            f"Linia {selected_route['route_short_name']} → {chosen['trip_headsign'] or 'Brak opisu kierunku'} · {day}"
+        )
         if observations is not None:
             st.warning(
                 "Obserwacje CUI pochodzą z osobnego eksportu, nie z wybranego dnia i snapshotu GTFS. Nie identyfikują wybranego kursu; aktualność niepotwierdzona."
@@ -367,23 +389,27 @@ def render(source, dataset):
             ).hexdigest()[:16]
         )
         try:
-            st.pydeck_chart(
+            map_event = st.pydeck_chart(
                 deck(visits, geometry, stop, basemap, vehicles),
-                height=560,
+                height=445,
                 key=map_key,
                 on_select=lambda: select_marker(map_key, names),
                 selection_mode="single-object",
             )
+            if not map_event.get("selection", {}).get("objects", {}).get("stops"):
+                # An omitted/recreated chart has no frontend pick. A later click
+                # on the same stop is a new selection even after clearing a date.
+                st.session_state["explorer_marker_selection"] = None
         except Exception:
             st.warning(
                 "Mapa jest niedostępna. Wybierz przystanek z listy; rozkład i tabele pozostają dostępne."
             )
         st.caption(
-            "Kliknij punkt na mapie lub wybierz przystanek z listy. Zielony: kurs; pomarańczowy: wybrany punkt; szary: niepotwierdzone obserwacje pojazdów."
+            "Kliknij punkt, aby zobaczyć odjazdy. Turkus: kurs · pomarańczowy: wybrany punkt. Mapa rozkładu, bez pozycji GPS."
         )
         if basemap:
             st.markdown(
-                "© [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) · [Warunki serwera kafelków](https://operations.osmfoundation.org/policies/tiles/). Dostęp bez SLA i z ograniczoną pojemnością. W razie awarii wyłącz podkład."
+                "© [OpenStreetMap contributors](https://www.openstreetmap.org/copyright) · [Warunki kafelków](https://operations.osmfoundation.org/policies/tiles/). Podkład wymaga sieci; można go wyłączyć."
             )
         if geometry:
             st.caption(
@@ -393,29 +419,51 @@ def render(source, dataset):
             st.info(
                 "Brak zaimportowanej geometrii shapes dla tego kursu. Pokazujemy przystanki, bez udawania przebiegu ulic lub torowiska."
             )
-        detail = st.radio(
-            "Szczegóły", ["Kurs", "Przystanek", "Pojazdy"], horizontal=True, key="explorer_detail"
+        if not show_vehicles and st.session_state.get("explorer_detail") == "Pojazdy":
+            st.session_state["explorer_detail"] = "Kurs"
+        # A map callback changes the canonical detail selection. Give that
+        # programmatic transition a fresh native widget identity so its client
+        # selection and the visible heading remain synchronized.
+        detail_key = (
+            "explorer_detail_"
+            + hashlib.sha256(
+                repr(
+                    (map_key, st.session_state.get("explorer_marker_revision", 0), show_vehicles)
+                ).encode()
+            ).hexdigest()[:16]
+        )
+        saved_detail = st.session_state.get("explorer_detail", "Kurs")
+        if detail_key not in st.session_state or st.session_state[detail_key] != saved_detail:
+            st.session_state[detail_key] = saved_detail
+        detail = st.segmented_control(
+            "Szczegóły",
+            ["Kurs", "Przystanek"] + (["Pojazdy"] if show_vehicles else []),
+            key=detail_key,
+            required=True,
+            label_visibility="collapsed",
+            on_change=remember_detail,
+            args=(detail_key,),
         )
         if detail == "Kurs":
             st.subheader("Rozkład konkretnego kursu")
-            chosen = by_trip[trip]
-            st.write(
-                f"Linia {selected_route['route_short_name']} → {chosen['trip_headsign'] or 'Brak opisu kierunku'} · {day}"
-            )
             st.text(
                 f"Początek: {service_time(chosen['start_seconds'])} · koniec: {service_time(chosen['end_seconds'])}"
             )
             st.text(
                 f"Kolejność: {visits[0]['stop_name']} → {visits[-1]['stop_name']} · {len(visits)} wizyt."
             )
-            st.caption(
-                f"trip_id={trip} · service_id={chosen['service_id']} · direction_id={chosen['direction_id']} · wariant={chosen['source_variant_id'] or variant[:6]}"
-            )
+            with st.expander("Identyfikatory kursu i geometria"):
+                st.caption(
+                    f"trip_id={trip} · service_id={chosen['service_id']} · direction_id={chosen['direction_id']} · wariant={chosen['source_variant_id'] or variant[:6]}"
+                )
             if chosen.get("scheduled_vehicle_type_id") or chosen.get("scheduled_brigade_id"):
                 st.caption(
                     f"Oznaczenia rozkładowe: vehicle_id={chosen['scheduled_vehicle_type_id']} · brigade_id={chosen['scheduled_brigade_id']}. Nie są pomiarem GPS ani potwierdzeniem konkretnego pojazdu."
                 )
-            st.dataframe(pd.DataFrame(timetable(visits)), hide_index=True, height=350)
+            with st.container(height=380, border=True):
+                visit_list(visits, stop)
+            with st.expander("Pełna tabela rozkładu"):
+                st.dataframe(pd.DataFrame(timetable(visits)), hide_index=True, height=350)
             st.caption(
                 "Każdy wiersz to wizyta według stop_sequence; powtórne wizyty zachowano. Czasy >24:00 należą do wybranego dnia usługi, brak czasu pozostaje brakiem."
             )

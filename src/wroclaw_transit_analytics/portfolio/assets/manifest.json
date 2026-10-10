@@ -1,0 +1,60 @@
+{
+  "manifest_version": 1,
+  "run_id": "wta-portfolio-v1",
+  "source_kind": "local_derivative",
+  "data_kind": "real_gtfs",
+  "archive_path": "wroclaw-sample-v1.zip",
+  "requested_url": null,
+  "final_url": null,
+  "catalog_url": null,
+  "downloaded_at": null,
+  "generated_at": "2026-10-10T10:08:48.185848+00:00",
+  "size_bytes": 537802,
+  "sha256": "11a6ed8814cc59d039a56f8b60dfa70b490c704c63906b237d306810225bbb7e",
+  "validation": {
+    "issues": [],
+    "profile": "wroclaw-static-mvp-v1",
+    "scope": "ZIP integrity, safe members, MVP headers and nonempty tables",
+    "status": "passed"
+  },
+  "derivative_sample": {
+    "version": "wta-portfolio-v1",
+    "notice": "Próbka archiwalnego rozkładu — wybrane linie, nie cała sieć",
+    "original": {
+      "requested_url": "https://open-data.cui.wroclaw.pl/hdb/download/141/",
+      "final_url": "https://open-data.cui.wroclaw.pl/hdb/download/141/",
+      "catalog_url": "https://open-data.cui.wroclaw.pl/hdb/ft/6/",
+      "downloaded_at": "2026-10-04T21:11:22.391308+00:00",
+      "sha256": "11fccf1a82e170bb2fe3c77c81cfdb6434158e143064b38ff23a3a5888e56f01"
+    },
+    "sample_sha256": "11a6ed8814cc59d039a56f8b60dfa70b490c704c63906b237d306810225bbb7e",
+    "selection": {
+      "route_short_names": [
+        "1",
+        "10",
+        "100",
+        "106"
+      ],
+      "rule": "All trips and visits of the selected lines; referenced agencies, stops and recursive parent stations, services, calendar exceptions and complete shapes. Original identifiers, row order, times and calendar dates are retained.",
+      "reproduction_script": "scripts/build_portfolio_sample.py",
+      "zip_metadata": "Sorted members; UTC-date 2026-10-10 00:00:00; Unix mode 100644; UTF-8 CSV with LF newlines; DEFLATE level 9."
+    },
+    "license": {
+      "identifier": "CC0-1.0",
+      "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "metadata_url": "https://open-data.cui.wroclaw.pl/hdb/metadane/13/",
+      "checked_at": "2026-10-10",
+      "publisher": "Urząd Miejski Wrocławia — Wydział Transportu"
+    },
+    "row_counts": {
+      "routes": 4,
+      "trips": 2036,
+      "stop_times": 53743,
+      "stops": 282,
+      "agency": 2,
+      "calendar": 4,
+      "calendar_dates": 0,
+      "shapes": 13537
+    }
+  }
+}

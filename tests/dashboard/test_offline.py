@@ -3,6 +3,7 @@ import subprocess
 import sys
 from datetime import date
 from importlib.resources import files
+from pathlib import Path
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -210,10 +211,10 @@ def test_three_views_dependent_filters_and_null_direction(fake_data):
     _, calls = fake_data
     at = app()
     assert not at.exception and not at.error
-    assert any("SYNTETYCZNE" in w.value for w in at.warning)
+    assert any("SYNTETYCZNE" in w.value for w in at.caption)
     assert at.metric[0].value == "17"
     assert at.metric[1].value == "Brak danych"
-    at.radio(key="analytics_view").set_value("Linia / punkt zatrzymania").run()
+    at.segmented_control(key="analytics_view").set_value("Linia / punkt zatrzymania").run()
     assert at.selectbox(key="filter_stop").value == "0001"
     assert at.selectbox(key="filter_direction").options == [
         "Wszystkie kierunki",
@@ -230,7 +231,7 @@ def test_three_views_dependent_filters_and_null_direction(fake_data):
     assert at.selectbox(key="filter_direction").value == "ALL"
     at.selectbox(key="filter_route").set_value("002").run()
     assert at.selectbox(key="filter_stop").value == "0001"
-    at.radio(key="view").set_value("Dane i jakość").run()
+    at.segmented_control(key="view").set_value("Dane").run()
     assert not at.exception and not at.error
     assert any("Lokalny generator" in t.value for t in at.text)
 
@@ -316,3 +317,24 @@ def test_server_limit_is_an_error_not_a_truncated_result():
 
     with pytest.raises(data.DashboardError, match="limit"):
         data.rows(Connection(), "SELECT 1", limit=2)
+
+
+def test_installed_launcher_uses_packaged_theme_from_any_working_directory(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
+    from wroclaw_transit_analytics.dashboard import launcher
+
+    calls = []
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        launcher.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append((command, kwargs)) or SimpleNamespace(returncode=0),
+    )
+    assert launcher.launch(port=8504) == 0
+    command, options = calls[0]
+    assert "--server.port=8504" in command
+    theme = options["cwd"] / ".streamlit" / "config.toml"
+    assert theme.is_file()
+    assert "primaryColor" in theme.read_text(encoding="utf-8")
+    assert Path.cwd() == tmp_path

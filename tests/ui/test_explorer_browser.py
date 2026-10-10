@@ -23,9 +23,21 @@ def control(page, label):
     )
 
 
+def settled(page):
+    """Wait for server deltas before interacting with dependent controls."""
+    from playwright.sync_api import expect
+
+    expect(page.get_by_test_id("stApp")).to_have_attribute(
+        "data-test-script-state", "notRunning", timeout=30000
+    )
+    expect(page.locator('[data-stale="true"]')).to_have_count(0, timeout=30000)
+
+
 def choose(page, label, option):
+    settled(page)
     control(page, label).click()
     page.get_by_role("option", name=option, exact=isinstance(option, str)).click()
+    settled(page)
 
 
 def select_dataset(page, dataset_id):
@@ -35,13 +47,7 @@ def select_dataset(page, dataset_id):
     def selected():
         return page.get_by_text("Wybrany dataset_id: " + dataset_id, exact=True).count() == 1
 
-    def settled():
-        expect(page.get_by_test_id("stApp")).to_have_attribute(
-            "data-test-script-state", "notRunning", timeout=30000
-        )
-        expect(page.locator('[data-stale="true"]')).to_have_count(0, timeout=30000)
-
-    settled()
+    settled(page)
     if selected():
         return
     control(page, "Snapshot danych").click()
@@ -64,7 +70,7 @@ def select_dataset(page, dataset_id):
         )
         # The sidebar delta arrives before the date/filter/map deltas. Wait for
         # the entire rerun instead of clicking another snapshot through stale controls.
-        settled()
+        settled(page)
         expect(control(page, "Snapshot danych")).to_have_attribute(
             "aria-label", re.compile(re.escape(label))
         )
@@ -100,6 +106,7 @@ def select_service_day(page, iso_day):
     expect(day).to_have_value(
         re.compile("^" + "[-–]".join(map(re.escape, iso_day.split("-"))) + "$")
     )
+    settled(page)
 
 
 def test_real_explorer_map_trips_click_filters_and_snapshot():
@@ -120,7 +127,7 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
         # Automated tests never scrape public OSM tiles. Test geometry and its no-basemap fallback.
         page.route("https://tile.openstreetmap.org/**", lambda route: route.abort())
         page.goto(url)
-        expect(page.get_by_role("heading", name="Mapa i linie", exact=True)).to_be_visible(
+        expect(page.get_by_role("heading", name="Mapa i kursy", exact=True)).to_be_visible(
             timeout=60000
         )
         select_dataset(page, expected["dataset_id"])
@@ -149,7 +156,7 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
                 "Konkretny kurs",
                 re.compile("trip_id=" + re.escape(example["trip"]["trip_id"]) + "$"),
             )
-            page.get_by_test_id("stRadio").get_by_text("Kurs", exact=True).click()
+            page.get_by_test_id("stButtonGroup").get_by_text("Kurs", exact=True).click()
             expect(
                 page.get_by_text(
                     f"Początek: {service_time(example['trip']['start_seconds'])} · koniec: {service_time(example['trip']['end_seconds'])}",
@@ -273,7 +280,7 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
             "Konkretny kurs",
             re.compile("trip_id=" + re.escape(late["trip"]["trip_id"]) + "$"),
         )
-        page.get_by_test_id("stRadio").get_by_text("Kurs", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Kurs", exact=True).click()
         expect(
             page.get_by_text(
                 f"Początek: {service_time(late['trip']['start_seconds'])} · koniec: {service_time(late['trip']['end_seconds'])}",
@@ -281,8 +288,9 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
             )
         ).to_be_visible(timeout=30000)
         page.screenshot(path=str(output / "real-midnight-trip.png"), full_page=True)
+        page.get_by_text("Eksperymentalne źródło CUI", exact=True).click()
         page.get_by_text("Obserwacje pojazdów z CUI", exact=True).click()
-        page.get_by_test_id("stRadio").get_by_text("Pojazdy", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Pojazdy", exact=True).click()
         expect(
             page.get_by_role("heading", name="Pozycje pojazdów — osobne źródło", exact=True)
         ).to_be_visible(timeout=60000)
@@ -308,11 +316,19 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
         day_field = page.get_by_test_id("stDateInputField").last
         separator = "–" if "–" in day_field.input_value() else "-"
         expect(day_field).to_have_value("2026-10-01".replace("-", separator))
+        experiment = page.get_by_test_id("stExpander").filter(
+            has=page.get_by_text("Eksperymentalne źródło CUI", exact=True)
+        )
+        was_open = experiment.locator("details").get_attribute("open") is not None
+        if not was_open:
+            page.get_by_text("Eksperymentalne źródło CUI", exact=True).click()
         expect(
             page.get_by_test_id("stCheckbox")
             .filter(has=page.get_by_text("Obserwacje pojazdów z CUI", exact=True))
             .get_by_role("checkbox")
         ).not_to_be_checked()
+        if not was_open:
+            page.get_by_text("Eksperymentalne źródło CUI", exact=True).click()
         choose(page, "Linia", re.compile("^D2 ·"))
         expect(day_field).to_have_value("2026-10-01".replace("-", separator))
         expect(
@@ -321,7 +337,7 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
                 exact=True,
             )
         ).to_be_visible(timeout=30000)
-        page.get_by_test_id("stRadio").get_by_text("Kurs", exact=True).click()
+        page.get_by_test_id("stButtonGroup").get_by_text("Kurs", exact=True).click()
         expect(
             page.get_by_role("heading", name="Rozkład konkretnego kursu", exact=True)
         ).to_be_visible()
@@ -329,7 +345,7 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
         assert page.get_by_test_id("stException").count() == 0
         assert not errors, errors
         select_dataset(page, expected["dataset_id"])
-        expect(page.get_by_role("heading", name="Mapa i linie", exact=True)).to_be_visible()
+        expect(page.get_by_role("heading", name="Mapa i kursy", exact=True)).to_be_visible()
         (output / "explorer-browser.json").write_text(
             json.dumps(
                 {

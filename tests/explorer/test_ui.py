@@ -114,6 +114,12 @@ def explorer_data(fake_data, monkeypatch):
     ui.refresh()
 
 
+def detail(at):
+    return next(
+        widget for widget in at.segmented_control if widget.key.startswith("explorer_detail_")
+    )
+
+
 def app():
     return AppTest.from_file(
         str(files("wroclaw_transit_analytics.dashboard").joinpath("app.py")), default_timeout=15
@@ -123,7 +129,7 @@ def app():
 def test_map_is_first_view_filters_variants_trips_and_no_shapes(explorer_data):
     at = app()
     assert not at.exception and not at.error
-    assert at.radio(key="view").value == "Mapa i linie"
+    assert at.segmented_control(key="view").value == "Mapa i kursy"
     assert at.selectbox(key="explorer_route").value == "bus"
     assert "agency_id=bus" in at.selectbox(key="explorer_route").options[0]
     assert any("geometrii shapes" in i.value for i in at.info)
@@ -136,7 +142,7 @@ def test_map_is_first_view_filters_variants_trips_and_no_shapes(explorer_data):
     assert at.selectbox(key="explorer_route").value == "tram"
     assert at.selectbox(key="explorer_variant").value == "v1"
     at.selectbox(key="explorer_stop").set_value("NA").run()
-    at.radio(key="explorer_detail").set_value("Przystanek").run()
+    detail(at).set_value("Przystanek").run()
     assert at.dataframe[0].value["Odjazd"].iloc[0] == "25:10:00"
     at.date_input[0].set_value(date(2026, 11, 1)).run()
     assert any("poza zakresem snapshotu" in i.value for i in at.info)
@@ -151,15 +157,15 @@ def test_snapshot_resets_search_mode_and_dependents_but_view_navigation_preserve
     at.selectbox(key="explorer_mode").set_value("Tramwaj").run()
     at.selectbox(key="explorer_variant").set_value("v2").run()
     at.selectbox(key="explorer_stop").set_value("NA").run()
-    at.radio(key="explorer_detail").set_value("Przystanek").run()
-    for view in ("Analityka", "Dane i jakość", "Mapa i linie"):
-        at.radio(key="view").set_value(view).run()
+    detail(at).set_value("Przystanek").run()
+    for view in ("Analityka", "Dane", "O projekcie", "Mapa i kursy"):
+        at.segmented_control(key="view").set_value(view).run()
         assert not at.error and not at.exception
     assert at.date_input[0].value == date(2026, 10, 2)
     assert at.selectbox(key="explorer_mode").value == "Tramwaj"
     assert at.selectbox(key="explorer_variant").value == "v2"
     assert at.selectbox(key="explorer_stop").value == "NA"
-    assert at.radio(key="explorer_detail").value == "Przystanek"
+    assert detail(at).value == "Przystanek"
     at.text_input(key="explorer_search").set_value("not in the next snapshot").run()
     assert any("Wyczyść wyszukiwanie" in i.value for i in at.info)
     at.selectbox(key="dataset").set_value("d2").run()
@@ -169,7 +175,7 @@ def test_snapshot_resets_search_mode_and_dependents_but_view_navigation_preserve
     assert at.selectbox(key="explorer_route").value == "bus"
     assert at.selectbox(key="explorer_variant").value == "v1"
     assert at.selectbox(key="explorer_stop").value == "001"
-    assert at.radio(key="explorer_detail").value == "Kurs"
+    assert detail(at).value == "Kurs"
     assert not at.toggle(key="explorer_vehicles").value
     at.selectbox(key="explorer_route").set_value("tram").run()
     assert at.date_input[0].value == date(2026, 10, 1)
@@ -216,7 +222,7 @@ def test_cleared_snapshot_and_analysis_have_instructions(explorer_data):
     assert any("Wybierz snapshot danych" in i.value for i in at.info)
     assert not at.error and not at.exception
     at.selectbox(key="dataset").set_value("d1").run()
-    at.radio(key="view").set_value("Analityka").run()
+    at.segmented_control(key="view").set_value("Analityka").run()
     at.selectbox(key="analysis").set_value(None).run()
     assert any("Wybierz analizę" in i.value for i in at.info)
     assert not at.error and not at.exception
@@ -226,10 +232,10 @@ def test_snapshot_changes_in_analytics_reset_map_even_after_return_to_original(e
     at = app()
     at.date_input[0].set_value(date(2026, 10, 2)).run()
     at.selectbox(key="explorer_mode").set_value("Tramwaj").run()
-    at.radio(key="view").set_value("Analityka").run()
+    at.segmented_control(key="view").set_value("Analityka").run()
     at.selectbox(key="dataset").set_value("d2").run()
     at.selectbox(key="dataset").set_value("d1").run()
-    at.radio(key="view").set_value("Mapa i linie").run()
+    at.segmented_control(key="view").set_value("Mapa i kursy").run()
     assert at.date_input[0].value == date(2026, 10, 1)
     assert at.selectbox(key="explorer_mode").value == "Wszystkie"
     assert at.selectbox(key="explorer_route").value == "bus"
@@ -257,7 +263,7 @@ def test_stop_departure_table_displays_precision_and_missing_time(
 
     monkeypatch.setattr(data, "fetch", fetch)
     at = app()
-    at.radio(key="explorer_detail").set_value("Przystanek").run()
+    detail(at).set_value("Przystanek").run()
     assert not at.exception and not at.error
     assert any(h.value == "Odjazdy z wybranego przystanku" for h in at.subheader)
     assert len(at.dataframe) == 1
@@ -284,10 +290,15 @@ def test_position_failure_does_not_remove_trip_tables(explorer_data, monkeypatch
     at.toggle(key="explorer_vehicles").set_value(True).run()
     assert not at.error and not at.exception
     assert len(at.dataframe) == 1
-    at.radio(key="explorer_detail").set_value("Pojazdy").run()
+    detail(at).set_value("Pojazdy").run()
     assert any("niedostępne" in w.value for w in at.warning)
-    at.radio(key="explorer_detail").set_value("Kurs").run()
+    detail(at).set_value("Kurs").run()
     assert len(at.dataframe) == 1
+    detail(at).set_value("Pojazdy").run()
+    at.toggle(key="explorer_vehicles").set_value(False).run()
+    assert detail(at).value == "Kurs"
+    assert len(at.dataframe) == 1
+    assert not at.error and not at.exception
 
 
 def test_map_layer_keeps_timetable_visits_and_attribution():
@@ -318,3 +329,61 @@ def test_basemap_provider_change_recreates_chart_and_keeps_selected_stop(explore
     assert json.loads(without_basemap.json).get("mapProvider") is None
     assert at.selectbox(key="explorer_stop").value == "NA"
     assert not at.error and not at.exception
+
+
+def test_display_cards_escape_external_names_and_preserve_repeat_visits(monkeypatch):
+    from wroclaw_transit_analytics.dashboard import presentation
+
+    rendered = []
+    monkeypatch.setattr(presentation.st, "html", rendered.append)
+    presentation.route_card(
+        {"route_short_name": '<img src=x onerror="bad()">', "agency_name": "A & B"},
+        "<script>bad()</script>",
+        "Autobus",
+    )
+    records = [
+        {
+            "stop_id": "same",
+            "stop_name": "<script>bad()</script>",
+            "stop_sequence": sequence,
+            "departure_seconds": seconds,
+            "timepoint": precision,
+            "pickup_type": 0,
+        }
+        for sequence, seconds, precision in ((1, 0, 1), (3, 90600, 0), (7, None, 1))
+    ]
+    presentation.visit_list(records, "same")
+    assert all("<script>" not in fragment and "<img src=x" not in fragment for fragment in rendered)
+    assert "&lt;script&gt;bad()&lt;/script&gt;" in rendered[0]
+    assert rendered[1].count('class="wta-visit selected"') == 3
+    assert all(time in rendered[1] for time in ("00:00:00", "25:10:00", "Brak czasu"))
+    assert "Czas przybliżony" in rendered[1]
+
+
+def test_marker_presentation_echo_does_not_override_explicit_course_selection(monkeypatch):
+    state = {
+        "map": {"selection": {"objects": {"stops": [{"stop_id": "A", "color": [15, 118, 110]}]}}},
+        "explorer_detail": "Kurs",
+    }
+    monkeypatch.setattr(ui.st, "session_state", state)
+    ui.select_marker("map", {"A", "B"})
+    assert state["explorer_stop"] == "A"
+    assert state["explorer_detail"] == "Przystanek"
+    assert state["explorer_marker_revision"] == 1
+    state["explorer_detail"] = "Kurs"
+    state["map"]["selection"]["objects"]["stops"][0].update(color=[245, 158, 11], radius=9)
+    ui.select_marker("map", {"A", "B"})
+    assert state["explorer_detail"] == "Kurs"
+    assert state["explorer_marker_revision"] == 1
+    state["map"]["selection"]["objects"]["stops"] = [{"stop_id": "B"}]
+    ui.select_marker("map", {"A", "B"})
+    assert state["explorer_detail"] == "Przystanek"
+    assert state["explorer_stop"] == "B"
+    assert state["explorer_marker_revision"] == 2
+    state["explorer_detail"] = "Kurs"
+    state["map"]["selection"]["objects"]["stops"] = []
+    ui.select_marker("map", {"A", "B"})
+    state["map"]["selection"]["objects"]["stops"] = [{"stop_id": "B"}]
+    ui.select_marker("map", {"A", "B"})
+    assert state["explorer_detail"] == "Przystanek"
+    assert state["explorer_marker_revision"] == 3

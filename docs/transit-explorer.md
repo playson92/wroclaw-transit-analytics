@@ -1,6 +1,11 @@
 # Mapa, linie i konkretne kursy
 
-Pierwszy ekran **Mapa i linie** przegląda jeden zaimportowany snapshot GTFS. Panel boczny
+Publiczną prezentację z małą próbką archiwalnego GTFS uruchamia jeden plik
+`compose.demo.yaml`: [quick start](../README.md#quick-start-from-a-fresh-download).
+Poniższe instrukcje dotyczą zachowanych starterów oraz trybu jawnego pełnego GTFS;
+nie są dodatkowymi krokami wymaganymi do portfolio demo.
+
+Pierwszy ekran **Mapa i kursy** przegląda jeden zaimportowany snapshot GTFS. Panel wyboru
 nazywa dane według ich pochodzenia i zapisanego czasu: snapshot GTFS Wrocławia albo
 demo syntetyczne. Brak informacji o czasie pozostaje jawny. Pełne dataset_id, hashe,
 parametry i metadane są w szczegółach technicznych.
@@ -9,7 +14,7 @@ Wybierz dzień usługi, rodzaj transportu, linię, kierunek/wariant i konkretny 
 Numery linii pochodzą z GTFS; niejednoznaczne oznaczenia zawierają kontekst operatora
 i identyfikatora. Mapa pokazuje **rozkładowy przebieg shapes**, nie GPS pojazdu.
 Kliknięcie przystanku otwiera jego odjazdy; lista **Przystanek** umożliwia ten sam wybór
-bez myszy. Zielone punkty są przystankami kursu, zaznaczony punkt jest wyróżniony;
+bez myszy. Turkusowe punkty są przystankami kursu, zaznaczony punkt jest pomarańczowy;
 osobne obserwacje CUI, po ich włączeniu, są szare.
 
 Tabela kursu zachowuje każdą wizytę stop_sequence, tekstowe ID, godziny ponad 24:00
@@ -20,8 +25,8 @@ są metadanymi źródła, bez potwierdzenia numeru bocznego ani pomiaru GPS.
 
 ## Odtwarzalny start
 
-Wymagany lokalny Docker Desktop z silnikiem Linux i Compose. Starter korzysta z lokalnego
-kontekstu `desktop-linux` i odmawia użycia zdalnego endpointu. Nie instaluje narzędzi,
+Wymagany lokalny Docker Desktop albo Docker Engine z silnikiem Linux i Compose.
+Starter respektuje aktywny lokalny kontekst i odmawia użycia zdalnego endpointu. Nie instaluje narzędzi,
 nie zmienia globalnego PATH ani ExecutionPolicy.
 
 Z katalogu repozytorium uruchom istniejącą instancję:
@@ -98,7 +103,7 @@ snapshotu. Wybrany przez użytkownika dzień poza obwiednią nie jest automatycz
 przestawiany; ma komunikat o zakresie. Poprawny dzień bez usług pozostaje takim dniem.
 Wyczyszczona data lub lista wyboru daje instrukcję uzupełnienia, bez błędnego zapytania.
 
-Przejście Mapa → Analityka → Dane i jakość → Mapa zachowuje kontekst tego snapshotu.
+Przejście Mapa i kursy → Analityka → Dane → O projekcie → Mapa i kursy zachowuje kontekst tego snapshotu.
 Odświeżenie strony lub nowa karta tworzy nową sesję: domyślny snapshot preferuje dane
 realne przed demo, następnie najnowszy zapisany import w tej kategorii. To wybór spośród
 danych już w bazie, bez pobierania ani automatycznego resolvera „latest” źródła.

@@ -22,5 +22,6 @@ dist
 **/*.key
 **/*.p12
 **/*.zip
+!src/wroclaw_transit_analytics/portfolio/assets/wroclaw-sample-v1.zip
 **/*.parquet
 tests

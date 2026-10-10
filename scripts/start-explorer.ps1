@@ -42,7 +42,13 @@ if (-not $EnvFile) { $EnvFile = if ($ProjectName -eq 'wta-explorer') { '.env.dem
 if (-not [IO.Path]::IsPathRooted($EnvFile)) { $EnvFile = Join-Path $RepoRoot $EnvFile }
 $EnvFile = [IO.Path]::GetFullPath($EnvFile)
 $dockerCommand = Get-Command docker -ErrorAction SilentlyContinue
-$docker = if ($dockerCommand) { $dockerCommand.Source } else { 'C:\Users\jonat\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe' }
+$docker = if ($dockerCommand) { $dockerCommand.Source } else { $null }
+if (-not $docker) {
+    $candidates = @()
+    if ($env:LOCALAPPDATA) { $candidates += Join-Path $env:LOCALAPPDATA 'Programs\DockerDesktop\resources\bin\docker.exe' }
+    if ($env:ProgramFiles) { $candidates += Join-Path $env:ProgramFiles 'Docker\Docker\resources\bin\docker.exe' }
+    $docker = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+}
 if (-not $docker -or -not (Test-Path -LiteralPath $docker)) { throw 'Nie znaleziono Docker CLI. Sprawdź istniejący Docker Desktop; starter niczego nie instaluje.' }
 $secretValues = @()
 function Hide-Secrets([string]$Text) {
@@ -56,7 +62,7 @@ function Invoke-Engine {
     $savedPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
-        $lines = @(& $script:docker --context desktop-linux @Arguments 2>&1)
+        $lines = @(& $script:docker @Arguments 2>&1)
         $nativeExit = $LASTEXITCODE
     } finally { $ErrorActionPreference = $savedPreference }
     $safeLines = @($lines | ForEach-Object { Hide-Secrets "$_" })
@@ -78,16 +84,23 @@ function Invoke-PipelineJson([string[]]$Arguments) {
     return $jsonLines[0] | ConvertFrom-Json
 }
 $previous = @{}
-foreach ($key in @('DOCKER_HOST','DOCKER_CONTEXT','DOCKER_TLS_VERIFY','DOCKER_CERT_PATH','POSTGRES_PORT','DASHBOARD_PORT','RAW_DIR','SILVER_DIR','POSTGRES_PASSWORD','WTA_LOADER_PASSWORD','WTA_READER_PASSWORD','COMPOSE_PROFILES')) {
+foreach ($key in @('POSTGRES_PORT','DASHBOARD_PORT','RAW_DIR','SILVER_DIR','POSTGRES_PASSWORD','WTA_LOADER_PASSWORD','WTA_READER_PASSWORD','COMPOSE_PROFILES')) {
     $previous[$key] = [Environment]::GetEnvironmentVariable($key,'Process')
 }
 try {
-    foreach ($key in @('DOCKER_HOST','DOCKER_TLS_VERIFY','DOCKER_CERT_PATH','POSTGRES_PASSWORD','WTA_LOADER_PASSWORD','WTA_READER_PASSWORD','COMPOSE_PROFILES')) {
+    foreach ($key in @('POSTGRES_PASSWORD','WTA_LOADER_PASSWORD','WTA_READER_PASSWORD','COMPOSE_PROFILES')) {
         [Environment]::SetEnvironmentVariable($key,$null,'Process')
     }
-    $env:DOCKER_CONTEXT = 'desktop-linux'
-    $endpoint = (Invoke-Engine -Arguments @('context','inspect','desktop-linux','--format','{{.Endpoints.docker.Host}}') -Capture) -join ''
-    if ($endpoint -notmatch '^(npipe:////\./pipe/|unix:///)' -or $endpoint -match '[\r\n]') { throw 'Kontekst desktop-linux nie wskazuje lokalnego silnika; zdalny Docker nie został użyty.' }
+    # Docker's own precedence is context override, then host override, then active context.
+    if ($env:DOCKER_HOST -and -not $env:DOCKER_CONTEXT) {
+        $endpoint = $env:DOCKER_HOST
+    } else {
+        $activeContext = if ($env:DOCKER_CONTEXT) { $env:DOCKER_CONTEXT } else {
+            (Invoke-Engine -Arguments @('context','show') -Capture) -join ''
+        }
+        $endpoint = (Invoke-Engine -Arguments @('context','inspect',$activeContext,'--format','{{.Endpoints.docker.Host}}') -Capture) -join ''
+    }
+    if ($endpoint -notmatch '^(npipe:////\./pipe/|unix:///)' -or $endpoint -match '[\r\n]') { throw 'Aktywna konfiguracja Dockera nie wskazuje lokalnego silnika; zdalny Docker nie został użyty.' }
     $server = (Invoke-Engine -Arguments @('info','--format','{{.OSType}}/{{.Architecture}}') -Capture) -join ''
     if ($server -notmatch '^linux/') { throw 'Explorer wymaga dostępnego lokalnego silnika Linux Docker Desktop.' }
     Invoke-Engine -Arguments @('compose','version','--short')

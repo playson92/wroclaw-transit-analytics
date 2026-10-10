@@ -6,10 +6,10 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
-from . import cache, data
+from . import cache, data, presentation
 from .formatting import direction_label, notice, number, percent, service_time
 
-VIEWS = ("Mapa i linie", "Analityka", "Dane i jakość")
+VIEWS = ("Mapa i kursy", "Analityka", "Dane", "O projekcie")
 ANALYTICS_VIEWS = ("Przegląd sieci", "Linia / punkt zatrzymania")
 
 
@@ -19,10 +19,15 @@ def dataset_labels(datasets):
     for dataset, row in datasets.items():
         provenance = row.get("provenance") or {}
         if row.get("data_kind") == "real_gtfs":
-            stamp = provenance.get("downloaded_at")
-            label = "Snapshot GTFS Wrocławia"
+            sample = provenance.get("derivative_sample")
+            stamp = (sample.get("original", {}) if sample else provenance).get("downloaded_at")
+            label = (
+                "Próbka archiwalnego GTFS"
+                if provenance.get("derivative_sample")
+                else "Snapshot GTFS Wrocławia"
+            )
             label += (
-                f" · pobrano {str(stamp)[:19].replace('T', ' ')} UTC"
+                f" · {'oryginał ' if sample else 'pobrano '}{str(stamp)[:10]}"
                 if stamp
                 else " · data pobrania niepodana"
             )
@@ -90,10 +95,12 @@ def overview(result):
             ("Obsługiwane punkty", "served_stops"),
         ):
             st.metric(label, number(k[key]), border=True)
-    st.caption(
-        "Kurs = trip_id w dniu usługi. Odjazd = wizyta z pickup_type=0 i znanym czasem. "
-        "Obsługiwany punkt = stop_id odwiedzony przez aktywny kurs, także bez regularnego czasu."
-    )
+    with st.expander("Jak czytać wskaźniki?"):
+        st.caption(
+            "Kurs = trip_id w dniu usługi. Odjazd = wizyta z pickup_type=0 i znanym czasem. "
+            "Obsługiwany punkt = stop_id odwiedzony przez aktywny kurs, także bez regularnego czasu. "
+            "NULL oznacza brak wiedzy, a 0 to znany brak zdarzeń."
+        )
     if k["covered_days"] != k["requested_days"]:
         st.warning(
             "Niepełny zakres kalendarza: wyniki obejmują tylko pokryte dni; pozostałe są nieznane."
@@ -245,27 +252,54 @@ def group(source, context):
 
 
 def quality(result):
-    st.header("Dane i jakość")
+    st.header("Dane")
     dataset, analysis = result["dataset"], result["analysis"]
     provenance = dataset.get("provenance") or {}
-    st.write("Rodzaj danych:", dataset.get("data_kind", "Niepotwierdzony"))
-    source = provenance.get("final_url") or provenance.get("requested_url")
-    st.text("Źródło: " + (source or "Lokalny generator; brak adresu pobrania"))
-    st.write("Pobranie UTC:", provenance.get("downloaded_at") or "Nie dotyczy / brak metadanych")
-    st.write("Generowanie UTC:", provenance.get("generated_at") or "Nie dotyczy / brak metadanych")
-    st.write("Import UTC:", str(dataset["loaded_at"]))
-    st.write("Analiza UTC:", str(analysis["created_at"]))
-    st.write("Model:", dataset["model_version"], "· KPI:", analysis["metrics_version"])
-    st.write(
-        "Zakres analizy:",
-        f"{analysis['start_date']} — {analysis['end_date']} (obie granice włącznie)",
+    sample = provenance.get("derivative_sample") or {}
+    original = sample.get("original", {}) if sample else provenance
+    source = original.get("final_url") or original.get("requested_url")
+    left, right = st.columns(2, gap="large")
+    with left:
+        with st.container(border=True):
+            st.subheader("Pochodzenie rozkładu")
+            st.text(
+                ("Oryginalne archiwum: " if sample else "Źródło: ")
+                + (source or "Lokalny generator; brak adresu pobrania")
+            )
+            st.write(
+                "Pobranie oryginału UTC:" if sample else "Pobranie UTC:",
+                original.get("downloaded_at") or "Nie dotyczy / brak metadanych",
+            )
+            if provenance.get("generated_at"):
+                st.write("Generowanie UTC:", provenance["generated_at"])
+            if sample:
+                st.write("Próbka pochodna:", sample.get("version", "wersjonowana"))
+                st.caption(
+                    "Zamknięty podzbiór źródła: linie, kursy, kalendarze, przystanki i shapes."
+                )
+                license_info = sample.get("license") or {}
+                st.write("Licencja danych:", license_info.get("identifier", "CC0 1.0"))
+                if license_info.get("metadata_url"):
+                    st.markdown(f"[Oficjalne metadane i warunki]({license_info['metadata_url']})")
+    with right:
+        with st.container(border=True):
+            st.subheader("Zakres i przygotowanie")
+            st.write("Zakres analizy:", f"{analysis['start_date']} — {analysis['end_date']}")
+            st.caption("Obie granice włącznie. KPI opisują wybrany snapshot i zakres.")
+            st.write("Import UTC:", str(dataset["loaded_at"]))
+            st.write("Analiza UTC:", str(analysis["created_at"]))
+            st.caption(f"Model: {dataset['model_version']} · KPI: {analysis['metrics_version']}")
+    st.subheader("Pokrycie i jakość")
+    st.caption(
+        "Obwiednia kalendarza nie gwarantuje usługi każdego dnia. total_events to wizyty, "
+        "regular_events to mianownik regularnych znanych odjazdów. NULL oznacza nieznane; "
+        "mianownik 0 nie daje procentu pokrycia."
     )
-    st.info(
-        "wta-gold-v1 nie rozwija frequencies. Flex nie jest obsługiwany przez profil silver. "
-        "Obwiednia kalendarza nie gwarantuje aktywnej usługi każdego dnia. Czasy zachowują dzień "
-        "usługowy, bez przeliczania na UTC ani interpretacji DST jako zegara ściennego."
-    )
-    with st.expander("Identyfikatory i hash", expanded=True):
+    coverage_table(result["coverage"])
+    with st.expander("Identyfikatory i hash"):
+        if sample:
+            st.text("SHA-256 oryginału: " + str(original.get("sha256", "Niepodany")))
+            st.caption("SHA-256 źródła poniżej dotyczy pochodnej próbki, nie pełnego archiwum.")
         for key, value in (
             ("dataset_id", dataset["dataset_id"]),
             ("analysis_id", analysis["analysis_id"]),
@@ -276,28 +310,25 @@ def quality(result):
     with st.expander("Jakość silver — statyczne rekordy źródła"):
         st.json(dataset["quality_report"])
         st.json(dataset["capabilities"])
-    with st.expander("Pokrycie gold — aktywne zdarzenia w filtrze dat", expanded=True):
-        st.caption(
-            "total_events to wizyty stop_times, regular_events to mianownik znanych "
-            "regularnych odjazdów. no_pickup i on_request są wykluczone. NULL oznacza "
-            "nieznane; mianownik 0 nie daje procentu pokrycia."
+    with st.expander("Ograniczenia modelu"):
+        st.write(
+            "wta-gold-v1 nie rozwija frequencies. Flex nie jest obsługiwany przez profil silver. "
+            "Czasy zachowują dzień usługowy, bez przeliczania na UTC ani interpretacji DST jako zegara ściennego."
         )
-        coverage_table(result["coverage"])
 
 
 def main():
     st.set_page_config(
         page_title="Wrocław Transit Analytics", page_icon=":material/tram:", layout="wide"
     )
-    st.title("Wrocław Transit Analytics")
-    st.caption("Przeglądarka komunikacji · rozkład zapisany w GTFS · analityka SQL gold")
+    presentation.style()
+    with st.container(key="portfolio_header"):
+        brand, snapshot = st.columns([2.2, 1])
+        with brand:
+            st.title("Wrocław Transit Analytics")
+            st.caption("Rozkład na mapie. Konkretne kursy. Analityka w SQL.")
     try:
         source = data.source_key()
-        if st.sidebar.button("Odśwież dane", icon=":material/refresh:"):
-            cache.refresh()
-            from ..explorer import ui as explorer_ui
-
-            explorer_ui.refresh()
         catalog = cache.catalog(source)
         datasets = {r["dataset_id"]: r for r in catalog["datasets"]}
         if not datasets:
@@ -308,31 +339,53 @@ def main():
             st.session_state["dataset"] is not None and st.session_state["dataset"] not in datasets
         ):
             st.session_state["dataset"] = next(iter(datasets))
-        dataset = st.sidebar.selectbox(
-            "Snapshot danych",
-            list(datasets),
-            index=None,
-            key="dataset",
-            format_func=labels.__getitem__,
-        )
+        with snapshot:
+            dataset = st.selectbox(
+                "Snapshot danych",
+                list(datasets),
+                index=None,
+                key="dataset",
+                format_func=labels.__getitem__,
+            )
         if dataset is None:
             st.info("Wybierz snapshot danych, aby otworzyć mapę i analitykę.")
             return
         from ..explorer import ui as explorer_ui
 
         explorer_ui.select_snapshot(source, dataset)
-        with st.sidebar.expander("Identyfikator snapshotu"):
-            st.text(f"Wybrany dataset_id: {dataset}")
+        with st.container(key="portfolio_nav"):
+            view = st.segmented_control(
+                "Widok",
+                VIEWS,
+                key="view",
+                default=VIEWS[0],
+                required=True,
+                label_visibility="collapsed",
+            )
+        provenance = datasets[dataset].get("provenance") or {}
+        if provenance.get("derivative_sample"):
+            st.caption(presentation.SAMPLE_NOTICE)
+        else:
+            st.caption(notice(datasets[dataset].get("data_kind")))
+        with snapshot:
+            with st.expander("Snapshot i narzędzia"):
+                st.text(f"Wybrany dataset_id: {dataset}")
+                if st.button("Odśwież dane", icon=":material/refresh:"):
+                    cache.refresh()
+                    explorer_ui.refresh()
+                    st.rerun()
         analyses = {r["analysis_id"]: r for r in catalog["analyses"] if r["dataset_id"] == dataset}
-        st.warning(notice(datasets[dataset].get("data_kind"))) if datasets[dataset].get(
-            "data_kind"
-        ) != "real_gtfs" else st.caption(notice("real_gtfs"))
-        view = st.sidebar.radio("Widok", VIEWS, key="view")
         # Widget cleanup runs even though these are radio views within one Streamlit page.
         # Keep selections for this snapshot while visiting analytics/quality.
         explorer_ui.retain_filters()
-        if view == "Mapa i linie":
+        if view == "Mapa i kursy":
             explorer_ui.render(source, dataset)
+            return
+        if view == "O projekcie":
+            presentation.about()
+            return
+        if view is None:
+            st.info("Wybierz widok aplikacji.")
             return
         if not analyses:
             st.info("Brak kompletnej analizy gold dla tego snapshotu. To nie są zerowe wyniki.")
@@ -345,15 +398,17 @@ def main():
             and st.session_state["analysis"] not in analyses
         ):
             st.session_state["analysis"] = next(iter(analyses))
-        analysis = st.sidebar.selectbox(
-            "Analiza",
-            list(analyses),
-            index=None,
-            key="analysis",
-            format_func=lambda a: (
-                f"{analyses[a]['start_date']} — {analyses[a]['end_date']} · {a[-10:]}"
-            ),
-        )
+        analysis_filter, date_filter = st.columns(2)
+        with analysis_filter:
+            analysis = st.selectbox(
+                "Analiza",
+                list(analyses),
+                index=None,
+                key="analysis",
+                format_func=lambda a: (
+                    f"{analyses[a]['start_date']} — {analyses[a]['end_date']} · {a[-10:]}"
+                ),
+            )
         if analysis is None:
             st.info("Wybierz analizę, aby wyświetlić wyniki gold.")
             return
@@ -362,23 +417,28 @@ def main():
             for key in ("dates", "filter_route", "filter_stop", "filter_direction"):
                 st.session_state.pop(key, None)
             st.session_state["context_dependency"] = (source, dataset, analysis)
-        dates = st.sidebar.date_input(
-            "Zakres dni usługowych",
-            value=(selected["start_date"], selected["end_date"]),
-            min_value=selected["start_date"],
-            max_value=selected["end_date"],
-            key="dates",
-            format="YYYY-MM-DD",
-        )
+        with date_filter:
+            dates = st.date_input(
+                "Zakres dni usługowych",
+                value=(selected["start_date"], selected["end_date"]),
+                min_value=selected["start_date"],
+                max_value=selected["end_date"],
+                key="dates",
+                format="YYYY-MM-DD",
+            )
         if not isinstance(dates, (tuple, list)) or len(dates) != 2:
             st.info("Wybierz obie granice zakresu dat.")
             return
         context = data.Context(dataset, analysis, *dates)
-        if view == "Dane i jakość":
+        if view == "Dane":
             quality(cache.fetch(source, "quality", context))
         else:
-            analytical_view = st.sidebar.radio(
-                "Widok analityki", ANALYTICS_VIEWS, key="analytics_view"
+            analytical_view = st.segmented_control(
+                "Widok analityki",
+                ANALYTICS_VIEWS,
+                key="analytics_view",
+                default=ANALYTICS_VIEWS[0],
+                required=True,
             )
             if analytical_view == ANALYTICS_VIEWS[0]:
                 overview(cache.fetch(source, "overview", context))

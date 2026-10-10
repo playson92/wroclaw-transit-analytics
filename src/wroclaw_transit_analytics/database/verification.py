@@ -12,6 +12,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from ..gtfs.exceptions import GTFSError
 from ..preparation.contract import (
     OPTIONAL_TABLES,
     TABLES,
@@ -19,7 +20,7 @@ from ..preparation.contract import (
     schema_for,
     update_digest,
 )
-from ..preparation.source import MODEL_VERSION, dataset_id
+from ..preparation.source import MODEL_VERSION, PrepareError, dataset_id, validate_derivative
 from .connection import DatabaseError
 
 
@@ -113,15 +114,21 @@ def _manifest_contract(manifest: dict) -> None:
         or manifest.get("data_kind") not in ("real_gtfs", "synthetic_demo")
         or manifest["source"].get("data_kind") != manifest["data_kind"]
         or manifest["source"].get("source_kind")
-        != {"real_gtfs": "official_https", "synthetic_demo": "local_synthetic"}[
-            manifest["data_kind"]
-        ]
+        not in {
+            "real_gtfs": ("official_https", "local_derivative"),
+            "synthetic_demo": ("local_synthetic",),
+        }[manifest["data_kind"]]
         or not isinstance(manifest.get("capabilities"), dict)
         or not isinstance(manifest.get("inventory"), list)
         or not isinstance(manifest.get("tables"), dict)
         or set(manifest["tables"]) != set(TABLES)
     ):
         raise DatabaseError("Niekompletne metadane lub tabele manifestu silver.")
+    if manifest["source"]["source_kind"] == "local_derivative":
+        try:
+            validate_derivative(manifest["source"], manifest["source_sha256"])
+        except (PrepareError, GTFSError, ValueError, TypeError):
+            raise DatabaseError("Niepoprawne pochodzenie próbki w manifeście silver.") from None
 
 
 def _quality_contract(manifest: dict, quality: dict) -> None:

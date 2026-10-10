@@ -25,16 +25,18 @@ args = sys.argv[1:]
 with Path(os.environ["MOCK_LOG"]).open("a", encoding="utf-8") as log:
     log.write(json.dumps({"args": args, "raw": os.environ.get("RAW_DIR"),
                           "host": os.environ.get("DOCKER_HOST"),
+                          "context": os.environ.get("DOCKER_CONTEXT"),
                           "password": bool(os.environ.get("POSTGRES_PASSWORD"))}) + "\n")
-if args[:2] != ["--context", "desktop-linux"]:
+if "--context" in args:
     raise SystemExit(91)
-args = args[2:]
 failure = os.environ.get("MOCK_FAILURE")
 if failure and failure in " ".join(args):
     print("password=secret_native_failure", file=sys.stderr)
     print("last useful diagnostic: mock native failure", file=sys.stderr)
     raise SystemExit(23)
-if args[:2] == ["context", "inspect"]:
+if args[:2] == ["context", "show"]:
+    print("custom-local")
+elif args[:2] == ["context", "inspect"]:
     print(os.environ.get("MOCK_ENDPOINT", "npipe:////./pipe/dockerDesktopLinuxEngine"))
 elif args[0] == "info":
     print("linux/amd64")
@@ -109,7 +111,8 @@ def harness(tmp_path):
     log = tmp_path / "native-calls.jsonl"
     env = os.environ.copy()
     env.update(PATH=str(native) + os.pathsep + env["PATH"], MOCK_LOG=str(log))
-    env["DOCKER_HOST"] = "tcp://remote-must-not-be-used:2375"
+    env.pop("DOCKER_HOST", None)
+    env["DOCKER_CONTEXT"] = "custom-local"
     env["POSTGRES_PASSWORD"] = "inherited-must-not-be-used"
     # A listening socket is used only for the HTTP health endpoint. The mocked Compose
     # reports its dashboard port as owned, avoiding a fake Docker bind of that endpoint.
@@ -248,6 +251,24 @@ def test_remote_endpoint_is_rejected_before_compose(harness):
     result, calls = run(["-Demo"], MOCK_ENDPOINT="tcp://remote:2375")
     assert result.returncode != 0
     assert not stages(calls)
+
+
+def test_active_local_context_is_preserved(harness):
+    _root, run = harness
+    result, calls = run(["-Demo"], DOCKER_CONTEXT="another-local-context")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert all(call["context"] == "another-local-context" for call in calls)
+    assert any(
+        call["args"][:3] == ["context", "inspect", "another-local-context"] for call in calls
+    )
+
+
+def test_remote_host_override_is_rejected_without_changing_environment(harness):
+    root, run = harness
+    result, calls = run(["-Demo"], DOCKER_CONTEXT="", DOCKER_HOST="tcp://remote:2375")
+    assert result.returncode != 0
+    assert not (root / ".env.starter-test").exists()
+    assert not calls
 
 
 def test_restart_without_owned_volumes_does_not_initialize_database(harness):

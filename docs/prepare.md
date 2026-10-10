@@ -52,5 +52,7 @@ Bronze może być poprawne, gdy relacje lub typowanie blokują silver.
 Nie edytuj raw, aby wymusić sukces.
 
 Szczegóły: [kontrakt danych](data-contract.md).
-Prepare pozostaje etapem plikowym. Gotowe silver obsługuje teraz
-[loader PostgreSQL 17](postgres-runtime.md); gold i dashboard pozostają planowane.
+Prepare pozostaje etapem plikowym. Gotowe silver obsługuje
+[loader PostgreSQL 17](postgres-runtime.md), [analityka SQL gold](metrics.md)
+i [dashboard z mapą](dashboard.md). Publiczne demo uruchamia cały ten przepływ
+z pakowanej próbki: [quick start](../README.md#quick-start-from-a-fresh-download).

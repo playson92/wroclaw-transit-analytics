@@ -1,0 +1,89 @@
+name: wta-portfolio
+
+x-app: &app
+  build: .
+  image: wta-portfolio-app
+  init: true
+  user: "10001:10001"
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  config:
+    <<: *app
+    # Only ownership and checking PG_VERSION need root. No application runs here.
+    user: "0:0"
+    network_mode: none
+    command: ["python", "-m", "wroclaw_transit_analytics.portfolio.runtime", "config"]
+    volumes:
+      - admin_credentials:/run/secrets/admin
+      - loader_credentials:/run/secrets/loader
+      - reader_credentials:/run/secrets/reader
+      - postgres_data:/database:ro
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: wta
+      POSTGRES_USER: wta_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/admin/password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - admin_credentials:/run/secrets/admin:ro
+    depends_on:
+      config:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wta_admin -d wta"]
+      interval: 2s
+      timeout: 5s
+      retries: 40
+    restart: unless-stopped
+
+  initializer:
+    <<: *app
+    command: ["python", "-m", "wroclaw_transit_analytics.portfolio.runtime", "initialize"]
+    volumes:
+      - admin_credentials:/run/secrets/admin:ro
+      - loader_credentials:/run/secrets/loader:ro
+      - reader_credentials:/run/secrets/reader:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  sample:
+    <<: *app
+    command: ["python", "-m", "wroclaw_transit_analytics.portfolio.runtime", "sample"]
+    volumes:
+      - loader_credentials:/run/secrets/loader:ro
+      - pipeline_work:/work
+    depends_on:
+      initializer:
+        condition: service_completed_successfully
+
+  dashboard:
+    <<: *app
+    command: ["python", "-m", "wroclaw_transit_analytics.portfolio.runtime", "dashboard"]
+    environment:
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+    volumes:
+      - reader_credentials:/run/secrets/reader:ro
+    ports:
+      - "127.0.0.1:${WTA_DEMO_PORT:-8504}:8501"
+    depends_on:
+      sample:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health',timeout=3)"]
+      interval: 2s
+      timeout: 5s
+      retries: 40
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  pipeline_work:
+  admin_credentials:
+  loader_credentials:
+  reader_credentials:
