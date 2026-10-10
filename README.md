@@ -1,148 +1,109 @@
-# Wroclaw Transit Analytics
+# Wrocław Transit Analytics
 
-Odtwarzalna analiza rozkładu GTFS: raw → bronze/silver Parquet i jakość → PostgreSQL
-→ SQL gold → dashboard Streamlit po polsku.
+Lokalna przeglądarka rozkładu komunikacji Wrocławia: mapa ulic i przebiegu kursu,
+linie, kierunki, konkretne kursy i rozkładowe odjazdy z przystanków. Python przygotowuje
+zweryfikowane GTFS, PostgreSQL liczy analitykę SQL, a Streamlit udostępnia oba widoki.
 
-## Jeden start demo
+![Mapa ulic, rozkładowa trasa i przystanki — historyczny snapshot GTFS](docs/assets/explorer-map.png)
 
-Wymagany działający Docker/daemon i Compose v2. PowerShell:
+Ekran przedstawia rzeczywiste ulice OpenStreetMap i historyczny snapshot GTFS,
+**nie aktualne położenie pojazdu GPS**. Demo syntetyczne jest osobno oznaczone w aplikacji.
+
+## Uruchomienie aktualnej aplikacji
+
+Wymagany działający lokalny Docker i Compose. W PowerShell, z katalogu repozytorium:
 
 ```powershell
-Set-Location 'C:\projekty\wroclaw-transit-analytics'
-& ([scriptblock]::Create((Get-Content -Encoding UTF8 -LiteralPath '.\scripts\start-demo.ps1' -Raw))) -RepoRoot (Get-Location).Path -DashboardPort 8501 -PostgresPort 5433
+& .\scripts\start-explorer.ps1
 ```
 
-Skrypt buduje obraz non-root, inicjalizuje bazę i role, wykonuje ten sam pipeline demo
-i uruchamia dashboard. Wypisuje rzeczywisty URL; adres oczekiwany przy domyślnym porcie
-to http://127.0.0.1:8501. Inny port: `-DashboardPort 8502`. Powtórzenie zachowuje hasła
-i named volumes własnego projektu wta-demo. Nie nadpisuje `.env` ani nie instaluje Dockera.
-**DANE SYNTETYCZNE — nie rozkład Wrocławia**. Linux/macOS: `sh scripts/start-demo.sh`.
+To start/restart istniejącego projektu `wta-explorer`: dashboard **8502**, PostgreSQL
+**5434**, istniejąca `.env.demo` i trwałe wolumeny. Skrypt buduje aktualny dashboard,
+sprawdza gotowość i wypisuje rzeczywisty adres. Po udanym starcie otwórz
+**http://127.0.0.1:8502**. Zwykły restart nie pobiera GTFS i nie importuje ponownie danych.
+Stare demo `wta-demo` na 8501/5433 pozostaje oddzielne.
 
-[Dashboard, reader i dokładne uruchomienie](docs/dashboard.md),
-[studium portfolio](docs/portfolio-case-study.md),
-[release notes/checklista v0.2.0](docs/release-notes-v0.2.0.md).
-Kod: MIT. Dane: CC0 1.0 według [oficjalnych metadanych](https://open-data.cui.wroclaw.pl/hdb/metadane/13/),
-odczyt 2026-10-07. Dane rozkładowe nie oznaczają punktualności, pasażerów ani realtime.
+Świeże demo, także z czystego checkoutu bez lokalnych danych autora:
 
-## MVP
+```powershell
+& .\scripts\start-explorer.ps1 -Demo -ProjectName wta-explorer-demo -DashboardPort 8503 -PostgresPort 5436
+```
 
-Zaimplementowany przepływ obejmuje:
+Skrypt tworzy własną konfigurację projektu tylko przy pierwszym starcie, uruchamia
+bazę, migracje i istniejący pipeline demo, a następnie dashboard. Powtórzenie zachowuje
+hasła i dane. To **dane syntetyczne, nie rozkład Wrocławia**. Porty można zmienić
+parametrami; skrypt nie zatrzymuje cudzych procesów. Adres wypisuje dopiero po gotowości.
 
-1. download a public GTFS dataset,
-2. preserve the original ZIP file in the raw data layer,
-3. validate required GTFS files and columns,
-4. extract stops, routes, trips and stop times,
-5. prepare cleaned analytical datasets,
-6. calculate basic route and stop statistics,
-7. run locally with automated tests and CI.
+Rzeczywiste dane wybierz jawnie: istniejący raw manifest albo konkretny oficjalny ZIP.
+Przykład bez ponownego pobierania:
 
-## Technology stack
+```powershell
+& .\scripts\start-explorer.ps1 -RawManifest 'C:\dane GTFS\raw\manifest.json' -StartDate 2026-10-03 -EndDate 2026-10-09
+```
 
-- Python 3.12
-- Pandas
-- PyArrow (Parquet)
-- HTTPX
-- SQL
-- PostgreSQL
-- Docker
-- pytest
-- Ruff
-- GitHub Actions
-- Streamlit (opcjonalny dashboard)
+Skrypt przekazuje faktyczne wyniki prepare/load/analytics do dalszych etapów i importu
+shapes. Nie wymaga przepisywania dataset_id, hashy ani wygenerowanych katalogów.
+Nie wybiera automatycznie „najnowszego” pliku. [Źródła, parametry i polityka PowerShell](docs/transit-explorer.md).
 
-## Local setup
+## Gdzie kliknąć
+
+1. Wybierz snapshot w panelu bocznym. Pierwszy ekran to **Mapa i linie**.
+2. Wybierz dzień usługi, rodzaj komunikacji i linię; następnie kierunek/wariant i kurs.
+3. Mapa pokazuje shapes wybranego kursu oraz jego przystanki. Kliknięcie punktu
+   otwiera odjazdy; ten sam punkt można wybrać z listy **Przystanek**.
+4. Szczegóły **Kurs** zawierają kolejność wizyt, godziny i zasady wsiadania.
+   **Przystanek** pokazuje rozkładowe odjazdy wybranej linii w tym dniu.
+5. **Analityka** pokazuje SQL KPI i szczegóły linii/punktu; **Dane i jakość** —
+   pochodzenie, pokrycie kalendarza i wyniki walidacji.
+
+Zmiana snapshotu resetuje zależne wybory. Godziny ponad 24:00 zachowują dzień usługi;
+brak czasu nie staje się północą. Oznaczenia „Dokładny” i „Przybliżony” pochodzą z GTFS.
+Lista, szczegóły i własna geometria działają również przy wyłączonym podkładzie.
+
+## Przepływ i ograniczenia
+
+**Oficjalny ZIP lub generator demo → raw → bronze/silver Parquet i kontrola jakości
+→ PostgreSQL → SQL gold / explorer → Streamlit.** Manifesty, hashe i izolacja datasetów
+zapewniają odtwarzalność; loader i analityka są transakcyjne i idempotentne.
+Dashboard używa osobnego użytkownika `wta_reader` bez praw zapisu.
+
+Lokalny oficjalny snapshot pobrano 2026-10-04; jego kalendarz obejmuje
+2026-10-03–2026-10-18. Nie potwierdzono zgodności tego archiwum z dzisiejszym rozkładem.
+Brak shapes daje przystanki bez udawanej prostej trasy. Brak usługi w poprawnym dniu
+i data poza zakresem danych mają odrębne komunikaty.
+
+**Live GPS nie należy do ukończonych funkcji.** Eksperymentalne obserwacje CUI są
+domyślnie wyłączone, szare i oddzielone od rozkładu. Ich czas i warunki użycia pozostają
+niepotwierdzone; nie są łączone z trip_id. Punktualność, pasażerowie, predykcje,
+planowanie przesiadek i chmura pozostają poza wydaniem 0.2.0.
+
+Kod: [MIT](LICENSE). GTFS: CC0 1.0 według [oficjalnych metadanych](https://open-data.cui.wroclaw.pl/hdb/metadane/13/)
+odczytanych 2026-10-07. Podkład: [atrybucja OpenStreetMap](https://www.openstreetmap.org/copyright)
+i [Tile Usage Policy](https://operations.osmfoundation.org/policies/tiles/), bez masowego pobierania
+i gwarancji dostępności. Warunki obserwacji CUI nie są potwierdzonymi warunkami GTFS.
+
+## Rozwój i sprawdzenie
+
+Python 3.12, Pandas, PyArrow, HTTPX, Psycopg, PostgreSQL 17, Streamlit 1.57/Pydeck,
+Docker Compose, pytest, Ruff i GitHub Actions. Instalacja dla dewelopera:
 
 ```powershell
 py -V:3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -c constraints.txt -e ".[dev,dashboard,ui-test]"
+.\.venv\Scripts\python.exe -m pip install -c constraints.txt -e ".[dev,dashboard,ui-test]"
+.\.venv\Scripts\ruff.exe check .
+.\.venv\Scripts\ruff.exe format --check .
+.\.venv\Scripts\python.exe -m pytest -m "not integration and not browser"
 ```
 
-## Checks
+Offline nie wymaga publicznego GTFS ani kafelków. CI dodatkowo uruchamia prawdziwy
+PostgreSQL i Compose/Chromium, w tym obowiązkową regresję przełączania dwóch
+syntetycznych snapshotów o rozłącznych kalendarzach. Publiczne kafelki są w testach
+blokowane lub zastępowane jawnie syntetycznym rastrem. Lokalny odbiór rzeczywistego
+snapshotu i ulic jest osobnym dowodem. Wyniki dotyczą konkretnych testowanych SHA.
 
-```powershell
-ruff check .
-ruff format --check .
-python -m pytest -m "not integration and not browser"
-```
+[Przeglądarka i starter](docs/transit-explorer.md) · [Dashboard i reader](docs/dashboard.md)
+· [Studium portfolio i SELECT](docs/portfolio-case-study.md) · [Wydanie 0.2.0](docs/release-notes-v0.2.0.md)
+· [Zakres](docs/project-scope.md) · [Stan implementacji](docs/project-plan.md)
+· [Kontrakt danych](docs/data-contract.md) · [Definicje KPI](docs/metrics.md).
 
-## GTFS ingestion (implemented)
-
-The first working feature downloads an explicitly selected official GTFS archive,
-preserves its bytes in raw, validates the `wroclaw-static-mvp-v1` profile and writes
-a JSON completion manifest. File preparation, SQL analytics and the optional UI are implemented.
-
-Start in the repository directory. Copy the address of a specific **Pobierz** link
-from the [official file catalogue](https://open-data.cui.wroclaw.pl/hdb/ft/6/), then run:
-
-```powershell
-Set-Location C:\projekty\wroclaw-transit-analytics
-.\.venv\Scripts\python.exe -m wroclaw_transit_analytics.gtfs --help
-.\.venv\Scripts\python.exe -m wroclaw_transit_analytics.gtfs --url "<OFFICIAL_ZIP_URL>"
-```
-
-Alternatively, set the environment variable in PowerShell:
-
-```powershell
-$env:GTFS_URL = "<OFFICIAL_ZIP_URL>"
-.\.venv\Scripts\python.exe -m wroclaw_transit_analytics.gtfs
-```
-
-`--url` takes precedence over `GTFS_URL`. A `.env` file is not loaded automatically.
-There is no automatic selection of the latest resource. See
-[GTFS ingestion](docs/gtfs-ingestion.md) for raw layout, failure handling and validation limits.
-
-## GTFS preparation (implemented)
-
-Completed raw runs now produce streamed textual bronze, typed silver Parquet,
-and a global quality report. Required values, keys, cross-table references and known
-service-time ordering must pass before silver is published. Source bytes remain unchanged.
-
-Start a small **synthetic** example after dependency installation:
-
-```powershell
-Set-Location C:\projekty\wroclaw-transit-analytics
-$demo = (& .\.venv\Scripts\python.exe -m wroclaw_transit_analytics sample-data --output-root data --json) | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0) { throw "Generator demo failed." }
-$result = (& .\.venv\Scripts\python.exe -m wroclaw_transit_analytics prepare --raw-manifest $demo.raw_manifest --output-root data --json) | ConvertFrom-Json
-if ($LASTEXITCODE -ne 0) { throw "Prepare failed." }
-$result | Format-List
-```
-
-The returned paths identify this exact run; no latest-file guessing is required.
-After packages are installed, sample generation and prepare are offline.
-For official data, use the existing ingestion command, then pass its actual raw manifest
-to prepare. See the [Polish prepare guide](docs/prepare.md).
-
-Times above 24:00 retain their GTFS service-day meaning. Missing allowed times stay null.
-Each run preserves source/model identity and inventories files excluded from the MVP.
-Nonempty frequencies is preserved in bronze and marks quantitative gold unsupported.
-Verified silver can now be loaded into PostgreSQL 17 using transactional COPY.
-Gold SQL is implemented below; the dashboard reads its results using a separate reader role.
-
-## PostgreSQL runtime (Sprint 02)
-
-The root CLI adds `db-init` and `db-load --silver-manifest PATH`.
-The [PostgreSQL and Compose guide](docs/postgres-runtime.md) gives exact PowerShell commands,
-roles, model grains, idempotence rules and read-only silver mounts.
-The application image runs as a non-root user. CI runs offline checks,
-real PostgreSQL 17 integration cases and a separate image build/Compose smoke.
-Local Windows Compose and the real-feed load require a working local Docker daemon;
-Linux CI does not establish Windows runtime compatibility.
-
-## Scheduled-service analytics (Sprint 03)
-
-`analytics --dataset-id ID --start-date YYYY-MM-DD --end-date YYYY-MM-DD --json`
-expands actual service calendars and computes daily trips, regular known departures,
-hourly counts, headways, service spans and per-day coverage in PostgreSQL SQL.
-The returned analysis_id identifies append-only results; repeat calls are idempotent.
-Unsupported frequencies and excessive expansion are rejected before publication.
-See [metrics and runnable examples](docs/metrics.md) for definitions, upgrade/grants,
-null/zero semantics, execution limits and service-day/DST restrictions.
-
-See [data contract](docs/data-contract.md), [scope](docs/project-scope.md)
-and [implementation plan](docs/project-plan.md).
-
-## Author
-
-Jonatan Tomaszewicz
+Autor: Jonatan Tomaszewicz.

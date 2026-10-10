@@ -187,7 +187,7 @@ jobs:
           docker compose up -d --wait dashboard
           docker compose exec -T dashboard id -u | tee evidence/dashboard-uid.txt
           grep -q 10001 evidence/dashboard-uid.txt
-          python -m pytest tests/ui -m browser --basetemp "$RUNNER_TEMP/browser-$GITHUB_RUN_ID" --junitxml=evidence/browser-tests.xml
+          python -m pytest tests/ui/test_browser.py tests/ui/test_raster_browser.py -m browser --basetemp "$RUNNER_TEMP/browser-$GITHUB_RUN_ID" --junitxml=evidence/browser-tests.xml
       - name: Restart PostgreSQL and verify named-volume persistence
         run: |
           docker compose restart postgres dashboard
@@ -198,7 +198,54 @@ jobs:
           WTA_BROWSER_URL: http://127.0.0.1:18501
           WTA_BROWSER_EXPECTED: evidence/compose-smoke.json
           WTA_BROWSER_EVIDENCE: evidence/after-restart
-        run: python -m pytest tests/ui -m browser --basetemp "$RUNNER_TEMP/browser-restart-$GITHUB_RUN_ID" --junitxml=evidence/browser-restart-tests.xml
+        run: python -m pytest tests/ui/test_browser.py tests/ui/test_raster_browser.py -m browser --basetemp "$RUNNER_TEMP/browser-restart-$GITHUB_RUN_ID" --junitxml=evidence/browser-restart-tests.xml
+      - name: Prepare two disjoint explicitly synthetic snapshots through the existing pipeline
+        run: |
+          docker compose run --rm --env WTA_BROWSER_FIXTURE_PROJECT=1 --entrypoint python pipeline /app/scripts/browser_fixtures.py > evidence/browser-fixtures.json
+          docker compose restart dashboard
+          docker compose up -d --wait dashboard
+      - name: Mandatory browser regression of snapshot state and existing demo UI
+        env:
+          WTA_BROWSER_URL: http://127.0.0.1:18501
+          WTA_BROWSER_EXPECTED: evidence/compose-smoke.json
+          WTA_BROWSER_FIXTURES: evidence/browser-fixtures.json
+          WTA_REQUIRE_SNAPSHOT_BROWSER: "1"
+          WTA_BROWSER_EVIDENCE: evidence/two-snapshots
+        run: |
+          python -m pytest tests/ui/test_snapshot_browser.py tests/ui/test_browser.py tests/ui/test_raster_browser.py -m browser --basetemp "$RUNNER_TEMP/browser-snapshots-$GITHUB_RUN_ID" --junitxml=evidence/snapshot-browser-tests.xml
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('evidence/snapshot-browser-tests.xml').getroot()
+          cases = root.findall('.//testcase')
+          regression = [c for c in cases if c.get('name') == 'test_disjoint_snapshots_visible_day_sql_course_filters_views_and_reload']
+          assert len(regression) == 1, 'Mandatory two-snapshot browser regression must execute'
+          assert len(cases) == 3, 'Expected snapshot, existing demo and enabled raster cases'
+          assert not root.findall('.//skipped'), 'Mandatory Compose browser cases cannot skip'
+          assert not root.findall('.//failure') and not root.findall('.//error')
+          print(f'Executed {len(cases)} mandatory Compose browser cases without skips')
+          PY
+      - name: Restart and verify all three isolated test snapshots persist
+        run: |
+          docker compose restart postgres dashboard
+          docker compose up -d --wait postgres dashboard
+          docker compose run --rm --env WTA_BROWSER_FIXTURE_PROJECT=1 --entrypoint python pipeline /app/scripts/browser_fixtures.py --verify /work/browser-fixtures.json > evidence/snapshot-restart.json
+      - name: Mandatory snapshot browser regression after restart
+        env:
+          WTA_BROWSER_URL: http://127.0.0.1:18501
+          WTA_BROWSER_EXPECTED: evidence/compose-smoke.json
+          WTA_BROWSER_FIXTURES: evidence/browser-fixtures.json
+          WTA_REQUIRE_SNAPSHOT_BROWSER: "1"
+          WTA_BROWSER_EVIDENCE: evidence/two-snapshots-after-restart
+        run: |
+          python -m pytest tests/ui/test_snapshot_browser.py tests/ui/test_browser.py tests/ui/test_raster_browser.py -m browser --basetemp "$RUNNER_TEMP/browser-snapshots-restart-$GITHUB_RUN_ID" --junitxml=evidence/snapshot-browser-restart-tests.xml
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('evidence/snapshot-browser-restart-tests.xml').getroot()
+          cases = root.findall('.//testcase')
+          assert len(cases) == 3
+          assert sum(c.get('name') == 'test_disjoint_snapshots_visible_day_sql_course_filters_views_and_reload' for c in cases) == 1
+          assert not root.findall('.//skipped') and not root.findall('.//failure') and not root.findall('.//error')
+          PY
       - name: Stop only this unique test project, retaining named volumes
         if: always()
         run: docker compose down --remove-orphans

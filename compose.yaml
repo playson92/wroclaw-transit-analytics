@@ -44,6 +44,12 @@ services:
     volumes:
       - pipeline_work:/work
       - type: bind
+        source: ${RAW_DIR:-./data/raw}
+        target: /input/raw
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
         source: ${SILVER_DIR:-./data/silver}
         target: /input/silver
         read_only: true

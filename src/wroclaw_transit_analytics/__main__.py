@@ -37,6 +37,11 @@ def main(argv: list[str] | None = None) -> int:
     load_parser.add_argument("--silver-manifest", type=Path, required=True)
     load_parser.add_argument("--batch-size", type=int, default=50_000)
     load_parser.add_argument("--json", dest="as_json", action="store_true")
+    shapes_parser = commands.add_parser(
+        "explorer-import", help="Geometria z tego samego zweryfikowanego raw GTFS."
+    )
+    shapes_parser.add_argument("--raw-manifest", type=Path, required=True)
+    shapes_parser.add_argument("--json", dest="as_json", action="store_true")
     analytics_parser = commands.add_parser("analytics", help="SQL gold dla jawnych dni usługi.")
     analytics_parser.add_argument("--dataset-id", required=True)
     analytics_parser.add_argument("--start-date", required=True)
@@ -75,6 +80,11 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(json.dumps(result, default=str, ensure_ascii=True))
             return 0 if result["status"] == "PASSED" else 1
+        elif args.command == "explorer-import":
+            from .explorer.geometry import import_geometry
+
+            print(json.dumps(import_geometry(args.raw_manifest)))
+            return 0
         elif args.command == "analytics":
             analyzed = analyze(
                 args.dataset_id,

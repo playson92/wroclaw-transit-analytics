@@ -20,6 +20,12 @@ def grant_loader(connection, role: str) -> None:
     connection.execute(
         sql.SQL("GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA gold TO {}").format(identifier)
     )
+    connection.execute(sql.SQL("GRANT USAGE ON SCHEMA explorer TO {}").format(identifier))
+    connection.execute(
+        sql.SQL(
+            "GRANT SELECT, INSERT ON explorer.geometry_imports, explorer.shape_points TO {}"
+        ).format(identifier)
+    )
 
 
 def grant_reader(connection, role: str = "wta_reader") -> None:
@@ -54,9 +60,9 @@ def grant_reader(connection, role: str = "wta_reader") -> None:
     ).fetchone()[0]
     unsafe = connection.execute(
         "SELECT EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
-        "WHERE n.nspname IN ('meta','silver','gold') AND c.relkind IN ('r','v','m','p') "
+        "WHERE n.nspname IN ('meta','silver','gold','explorer') AND c.relkind IN ('r','v','m','p') "
         "AND has_table_privilege(%s,c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')) "
-        "OR EXISTS(SELECT 1 FROM pg_namespace WHERE nspname IN ('meta','silver','gold','public') "
+        "OR EXISTS(SELECT 1 FROM pg_namespace WHERE nspname IN ('meta','silver','gold','explorer','public') "
         "AND has_schema_privilege(%s,oid,'CREATE'))",
         (role, role),
     ).fetchone()[0]
@@ -71,5 +77,13 @@ def grant_reader(connection, role: str = "wta_reader") -> None:
             "GRANT SELECT ON gold.analysis_days, gold.route_daily, gold.stop_daily, "
             "gold.route_stop_hourly, gold.route_stop_headways, gold.service_span, gold.coverage_daily, "
             "gold.route_catalog, gold.stop_catalog TO {}"
+        ).format(identifier)
+    )
+    connection.execute(sql.SQL("GRANT USAGE ON SCHEMA explorer TO {}").format(identifier))
+    connection.execute(
+        sql.SQL(
+            "GRANT SELECT ON explorer.routes, explorer.stops, explorer.calendar, "
+            "explorer.calendar_dates, explorer.trips, explorer.stop_times, "
+            "explorer.geometry_imports, explorer.shape_points TO {}"
         ).format(identifier)
     )

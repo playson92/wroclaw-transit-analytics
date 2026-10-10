@@ -231,7 +231,7 @@ def test_upgrade_preserves_loaded_silver_and_001_checksum(db_url, silver):
     before = query(db_url, "SELECT source_manifest,logical_fingerprint FROM meta.datasets")
     with pytest.raises(AnalyticsError, match="MIGRATIONS_REQUIRED"):
         analyze(identity, "2026-10-01", "2026-10-01", db_url)
-    assert initialize(db_url) == ["002_gold.sql"]
+    assert initialize(db_url) == [entry[0] for entry in migrations[1:]]
     assert query(db_url, "SELECT source_manifest,logical_fingerprint FROM meta.datasets") == before
     assert query(
         db_url, "SELECT checksum FROM meta.migrations WHERE version='001_warehouse.sql'"

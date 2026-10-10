@@ -9,6 +9,7 @@ RUN python -m pip install --no-cache-dir -c constraints.txt '.[dashboard]' \
     && chown wta:wta /work
 COPY scripts/compose_smoke.py ./scripts/compose_smoke.py
 COPY scripts/real_feed_smoke.py ./scripts/real_feed_smoke.py
+COPY scripts/browser_fixtures.py ./scripts/browser_fixtures.py
 USER 10001:10001
 WORKDIR /work
 CMD ["python", "-m", "wroclaw_transit_analytics", "--help"]
