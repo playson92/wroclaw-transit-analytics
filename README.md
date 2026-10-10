@@ -72,9 +72,9 @@ Both `linux/amd64` and `linux/arm64` use the same Dockerfile and dependency cons
 
 | Host / runner | Container architecture | Verification | Result / limitation |
 | --- | --- | --- | --- |
-| Windows + Docker Desktop | Linux AMD64 | Real sample/database and Edge browser preview; fresh ZIP-equivalent export, repeat and restart are separate acceptance steps | Preview verified; exact-commit clean-start acceptance still pending |
-| GitHub Actions, Ubuntu | Linux AMD64, native | Full Compose demo and browser checks | Required CI check; see the linked run for the reviewed commit |
-| GitHub Actions, Ubuntu ARM runner | Linux ARM64, native | Image, native imports, preparation and full Compose/browser runtime | Required CI check; see the linked run for the reviewed commit |
+| Windows + Docker Desktop | Linux AMD64 | Exact-commit export without Git metadata, local environment or author data, in a path with spaces; first start, repeat, scoped restart, SQL and Edge browser | **PASS:** sample, analysis, geometry, KPIs and credentials preserved; actual browser verification |
+| GitHub Actions, Ubuntu | Linux AMD64, native | Full native Compose demo and browser job | Commit-specific result in linked CI; required runtime check |
+| GitHub Actions, Ubuntu ARM runner | Linux ARM64, native | Image, native imports, preparation and full native Compose/browser job | Commit-specific result in linked CI; required runtime check |
 | macOS / Apple Silicon | Linux ARM64 intended | No physical macOS environment available | **Not tested on macOS**; Linux ARM64 evidence is not a macOS test |
 
 [CI runs](https://github.com/playson92/wroclaw-transit-analytics/actions/workflows/ci.yml) publish JUnit, screenshots and the tested source SHA. Local visual acceptance additionally checks 1440×900, 1366×768, 1024 px and approximately 390 px layouts.
