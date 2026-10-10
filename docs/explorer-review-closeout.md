@@ -53,10 +53,16 @@ poprawnie, bez błędów JavaScript. Nie zastępujemy tego dowodu kafelkami mock
 
 Lokalnie: Ruff check/format i git diff --check PASS; offline **275 passed,
 2 skipped** (uprawnienia symlinków Windows); PostgreSQL **29 passed**, bez skipów;
-**3 przypadki browser**: analityka demo, rzeczywiste kursy bez rastera i aktywny
-syntetyczny raster. Końcowy SHA, XML/logi, screenshoty oraz aktualne wyniki CI
+**3 przypadki browser**: analityka demo i aktywny syntetyczny raster PASS;
+rzeczywiste kursy, warianty, kliknięcia i nocny kurs PASS, ale końcowe
+przełączenie snapshotu wykazało opisany niżej błąd. Pełny końcowy przebieg:
+**306 passed, 2 skipped, 1 failed**. Końcowy SHA, XML/logi, screenshoty oraz wyniki CI
 znajdują się w nowym `output/codex_runs/<UTC_TIMESTAMP>/closeout.zip`.
-Wyników Linux CI nie utożsamiamy z lokalnymi pominięciami Windows.
+Linux CI przejrzanego kodu: **277 offline passed, 29 PostgreSQL passed**,
+**2 browser passed + 1 skipped** przed restartem i ponownie po restarcie.
+Pominięty jest lokalny test rzeczywistej bazy; nowy test rastera faktycznie
+wykonał się dwukrotnie i przeszedł. Nie traktujemy zielonego CI jako dowodu
+poprawnego resetu daty w rzeczywistym kliencie.
 
 Zbudowano i odtworzono wyłącznie dashboard `wta-explorer`,
 <http://127.0.0.1:8502>, PostgreSQL na 5434. Wszystkie 65 śledzonych plików
@@ -74,6 +80,24 @@ Snapshot GTFS pozostaje historyczny. CUI ma niepotwierdzony czas i warunki
 źródła; live pozostaje zablokowane, szare obserwacje nie oznaczają aktualnego GPS
 i nie są przypisywane do trip_id. Te ograniczenia nie blokują rozkładowej mapy.
 
-Merge PR #7 jest dopuszczalny dopiero po zielonym CI dla końcowego SHA,
-ponownym sprawdzeniu diffu i braku konfliktów/blokującego review, przez merge
-commit z `--match-head-commit`. Wynik tej operacji zapisuje raport closeout.
+## Blokada merge: dzień po zmianie snapshotu
+
+**PR #7 pozostaje roboczy; nie wykonano merge.** Minimalna reprodukcja bez CUI:
+otwórz 8502, wyłącz podkład, przełącz real_gtfs (dzień 2026-10-10) na
+synthetic_demo, następnie wybierz D2, aby wywołać następny rerun. Pierwszy render
+korzysta z dnia 2026-10-07 w stanie Python, ale klient wyświetla 2026-10-10.
+Kolejny rerun przyjmuje tę datę spoza kalendarza demo i pokazuje „Brak kursów”.
+Istniejący test dwukrotnie powtórzył błąd; kończy się timeoutem wyboru „Kurs”,
+ponieważ szczegóły znikają. Dashboard nie zgłasza wyjątku serwera.
+
+`value=None` w `st.date_input` wysyła pusty domyślny stan date_input do klienta,
+chociaż session_state zawiera poprawny dzień. W Streamlit 1.57 domyślna wartość
+API `"today"` odczytuje istniejący klucz session_state podczas serializacji.
+Minimalna propozycja do osobnego review: usunąć tylko `value=None` z tego
+wywołania, pozostawiając dotychczasowe obliczenie i reset dnia.
+
+`PROPOSED-ONLY-date-reset.diff`, reprodukcja JSON/DOM/screenshot i diagnostyka
+protokołu są w closeout.zip. Propozycja **nie została zastosowana** do runtime
+ani wdrożona; nie stanowi zatwierdzonej poprawki. Wymaga sprawdzenia w prawdziwej
+przeglądarce i ponownego przejścia istniejących kontroli przed merge. Hash ui.py
+nadal odpowiada dokładnie R1. Dodatkowego runtime nie włączono pod jego zgodą.
