@@ -383,7 +383,7 @@ def render(source, dataset):
         map_key = (
             "explorer_map_"
             + hashlib.sha256(
-                # Switching the map provider to None must recreate the frontend map;
+                # Switching the basemap style must recreate the frontend map;
                 # reusing its instance can leave the previous raster behind.
                 repr((source, dataset, day, route, variant, trip, basemap)).encode()
             ).hexdigest()[:16]

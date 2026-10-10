@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
+from tests.ui.browser_network import protect_local_browser
 from tests.ui.test_explorer_browser import choose, control, select_dataset, select_service_day
 
 from wroclaw_transit_analytics.explorer.map import deck
@@ -64,7 +65,7 @@ def test_enabled_raster_demo_pixels_markers_and_stop_selection():
             served.append(route.request.url)
             route.fulfill(status=200, content_type="image/png", body=tile.getvalue())
 
-        page.route("https://tile.openstreetmap.org/**", serve_tile)
+        public_requests = protect_local_browser(page, url, serve_tile)
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(url)
         expect(page.get_by_role("heading", name="Mapa i kursy", exact=True)).to_be_visible(
@@ -172,6 +173,7 @@ def test_enabled_raster_demo_pixels_markers_and_stop_selection():
             assert time.monotonic() < deadline, f"Raster-off control failed: {without}"
             page.wait_for_timeout(200)
         assert not errors, errors
+        assert not public_requests, public_requests
         assert page.get_by_test_id("stException").count() == 0
         (output / "raster-render-test.json").write_text(
             json.dumps(

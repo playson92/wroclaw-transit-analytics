@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 import pytest
+from tests.ui.browser_network import protect_local_browser
 from tests.ui.test_explorer_browser import select_dataset
 
 from wroclaw_transit_analytics.dashboard.formatting import number, service_time
@@ -26,7 +27,7 @@ def test_live_views_filters_refresh_and_screenshots():
     with sync_playwright() as p:
         browser = p.chromium.launch(channel=os.environ.get("WTA_BROWSER_CHANNEL"))
         page = browser.new_page(viewport={"width": 1440, "height": 1050}, device_scale_factor=1)
-        page.route("https://tile.openstreetmap.org/**", lambda route: route.abort())
+        public_requests = protect_local_browser(page, url)
         errors = []
         page.on("pageerror", lambda error: errors.append(type(error).__name__))
         page.goto(url)
@@ -135,6 +136,7 @@ def test_live_views_filters_refresh_and_screenshots():
             number(expected["trips"]), timeout=30000
         )
         assert not errors
+        assert not public_requests, public_requests
         assert page.get_by_test_id("stException").count() == 0
         assert page.get_by_test_id("stAlert").filter(has_text="Nie udało się").count() == 0
         (output / f"{kind}-browser.json").write_text(

@@ -314,7 +314,15 @@ def test_map_layer_keeps_timetable_visits_and_attribution():
     assert isinstance(chart.map_style, str) and chart.map_style.startswith("data:application/json,")
     assert "OpenStreetMap" in chart.to_json()
     assert chart._tooltip == {"text": "{label}"}  # GTFS is never rendered as tooltip HTML.
-    assert deck(visits, [], "001", basemap=False).map_provider is None
+    from urllib.parse import unquote
+
+    disabled = json.loads(deck(visits, [], "001", basemap=False).to_json())
+    assert disabled["mapProvider"] == "mapbox"
+    assert json.loads(unquote(disabled["mapStyle"].split(",", 1)[1])) == {
+        "version": 8,
+        "sources": {},
+        "layers": [],
+    }
 
 
 def test_basemap_provider_change_recreates_chart_and_keeps_selected_stop(explorer_data):
@@ -325,8 +333,15 @@ def test_basemap_provider_change_recreates_chart_and_keeps_selected_stop(explore
     at.toggle(key="explorer_basemap").set_value(False).run()
     without_basemap = at.get("deck_gl_json_chart")[0].proto
     assert without_basemap.id != with_basemap.id
-    assert json.loads(without_basemap.json).get("mapStyle") is None
-    assert json.loads(without_basemap.json).get("mapProvider") is None
+    from urllib.parse import unquote
+
+    disabled = json.loads(without_basemap.json)
+    assert disabled["mapProvider"] == "mapbox"
+    assert json.loads(unquote(disabled["mapStyle"].split(",", 1)[1])) == {
+        "version": 8,
+        "sources": {},
+        "layers": [],
+    }
     assert at.selectbox(key="explorer_stop").value == "NA"
     assert not at.error and not at.exception
 

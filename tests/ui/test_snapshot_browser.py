@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 import pytest
+from tests.ui.browser_network import protect_local_browser
 from tests.ui.test_explorer_browser import choose, control, select_dataset, select_service_day
 
 pytestmark = pytest.mark.browser
@@ -75,16 +76,10 @@ def test_disjoint_snapshots_visible_day_sql_course_filters_views_and_reload():
     with sync_playwright() as p:
         browser = p.chromium.launch(channel=os.environ.get("WTA_BROWSER_CHANNEL"))
         page = browser.new_page(viewport={"width": 1440, "height": 1050}, device_scale_factor=1)
-        errors, forbidden = [], []
+        errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         # CI exercises timetable geometry without any public OSM traffic or CUI calls.
-        page.route("https://tile.openstreetmap.org/**", lambda route: route.abort())
-
-        def reject_cui(route):
-            forbidden.append(route.request.url)
-            route.abort()
-
-        page.route("https://open-data.cui.wroclaw.pl/**", reject_cui)
+        forbidden = protect_local_browser(page, url)
         page.goto(url)
         expect(page.get_by_role("heading", name="Mapa i kursy", exact=True)).to_be_visible(
             timeout=60000

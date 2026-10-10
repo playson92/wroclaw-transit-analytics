@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 import pytest
+from tests.ui.browser_network import protect_local_browser
 
 from wroclaw_transit_analytics.dashboard.formatting import service_time
 from wroclaw_transit_analytics.explorer.map import deck
@@ -125,7 +126,7 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         # Automated tests never scrape public OSM tiles. Test geometry and its no-basemap fallback.
-        page.route("https://tile.openstreetmap.org/**", lambda route: route.abort())
+        public_requests = protect_local_browser(page, url)
         page.goto(url)
         expect(page.get_by_role("heading", name="Mapa i kursy", exact=True)).to_be_visible(
             timeout=60000
@@ -344,6 +345,7 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
         page.screenshot(path=str(output / "demo-without-shapes.png"), full_page=True)
         assert page.get_by_test_id("stException").count() == 0
         assert not errors, errors
+        assert not public_requests, public_requests
         select_dataset(page, expected["dataset_id"])
         expect(page.get_by_role("heading", name="Mapa i kursy", exact=True)).to_be_visible()
         (output / "explorer-browser.json").write_text(

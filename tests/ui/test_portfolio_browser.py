@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 import pytest
+from tests.ui.browser_network import protect_local_browser
 from tests.ui.test_explorer_browser import (
     choose,
     control,
@@ -28,6 +29,20 @@ def navigate(page, view):
     settled(page)
     page.get_by_test_id("stButtonGroup").get_by_text(view, exact=True).click()
     settled(page)
+
+
+def viewport_dimensions(page):
+    """Wait for Streamlit's ResizeObserver and chart layout after a viewport change."""
+    measure = """(() => {const main=document.querySelector('[data-testid="stMain"]');
+        return {scroll:document.documentElement.scrollWidth,width:window.innerWidth,
+        mainScroll:main.scrollWidth,mainWidth:main.clientWidth};})()"""
+    page.wait_for_function(
+        """() => {const main=document.querySelector('[data-testid="stMain"]');
+        return document.documentElement.scrollWidth <= window.innerWidth + 1 &&
+            main.scrollWidth <= main.clientWidth + 1;}""",
+        timeout=15000,
+    )
+    return page.evaluate(measure)
 
 
 def choose_course(page, course):
@@ -129,7 +144,18 @@ def click_marker(page, course):
         ),
     )
     visit, x, y = candidate
-    page.mouse.click(box["x"] + x, box["y"] + y)
+    # SwiftShader/software WebGL can paint before its asynchronous picking
+    # result is ready. Prove the native hover identifies this exact SQL stop,
+    # then make one real click rather than clicking while the pointer arrives.
+    page.mouse.move(box["x"] + x, box["y"] + y)
+    expect(
+        chart.get_by_text(re.compile("stop_id=" + re.escape(visit["stop_id"]) + "$"))
+    ).to_be_visible(timeout=15000)
+    # A human press spans browser frames. A zero-duration CDP down/up can
+    # outrun async software-GPU picking even after the correct hover rendered.
+    # The renderer's transparent map-view element intentionally sits above the
+    # canvas. Click the visible map surface, letting its normal hit testing run.
+    page.mouse.click(box["x"] + x, box["y"] + y, delay=150)
     expect(page.get_by_role("heading", name="Odjazdy z wybranego przystanku")).to_be_visible(
         timeout=30000
     )
@@ -157,15 +183,9 @@ def test_portfolio_real_sample_course_views_filters_mobile_and_reload():
     with sync_playwright() as p:
         browser = p.chromium.launch(channel=os.environ.get("WTA_BROWSER_CHANNEL"))
         page = browser.new_page(viewport={"width": 1440, "height": 900}, device_scale_factor=1)
-        errors, source_requests = [], []
+        errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
-        page.route("https://tile.openstreetmap.org/**", lambda route: route.abort())
-
-        def reject_source(route):
-            source_requests.append(route.request.url)
-            route.abort()
-
-        page.route("https://open-data.cui.wroclaw.pl/**", reject_source)
+        source_requests = protect_local_browser(page, url)
         page.goto(url)
         expect(page.get_by_role("heading", name="Mapa i kursy", exact=True)).to_be_visible(
             timeout=60000
@@ -221,11 +241,7 @@ def test_portfolio_real_sample_course_views_filters_mobile_and_reload():
         ):
             page.set_viewport_size({"width": width, "height": height})
             expect(chart).to_be_visible()
-            dimensions = page.evaluate(
-                """(() => {const main=document.querySelector('[data-testid="stMain"]');
-                return {scroll:document.documentElement.scrollWidth,width:window.innerWidth,
-                mainScroll:main.scrollWidth,mainWidth:main.clientWidth};})()"""
-            )
+            dimensions = viewport_dimensions(page)
             assert dimensions["scroll"] <= dimensions["width"] + 1, dimensions
             assert dimensions["mainScroll"] <= dimensions["mainWidth"] + 1, dimensions
             page.screenshot(path=str(output / f"portfolio-{name}.png"), full_page=True)
@@ -277,11 +293,7 @@ def test_portfolio_real_sample_course_views_filters_mobile_and_reload():
             )
             page.set_viewport_size({"width": 390, "height": 844})
             expect(page.get_by_role("heading", name=heading, exact=True)).to_be_visible()
-            mobile_dimensions = page.evaluate(
-                """(() => {const main=document.querySelector('[data-testid="stMain"]');
-                return {scroll:document.documentElement.scrollWidth,width:window.innerWidth,
-                mainScroll:main.scrollWidth,mainWidth:main.clientWidth};})()"""
-            )
+            mobile_dimensions = viewport_dimensions(page)
             assert mobile_dimensions["scroll"] <= mobile_dimensions["width"] + 1, mobile_dimensions
             assert mobile_dimensions["mainScroll"] <= mobile_dimensions["mainWidth"] + 1, (
                 mobile_dimensions
@@ -298,7 +310,7 @@ def test_portfolio_real_sample_course_views_filters_mobile_and_reload():
         )
         assert_course(page, expected["default"])
         assert not errors, errors
-        assert not source_requests, "Primary demo unexpectedly requested the city API or GTFS"
+        assert not source_requests, f"Unexpected public provider requests: {source_requests}"
         assert page.get_by_test_id("stException").count() == 0
         (output / "portfolio-browser.json").write_text(
             json.dumps(
