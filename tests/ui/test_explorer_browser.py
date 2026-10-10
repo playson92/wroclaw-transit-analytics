@@ -28,6 +28,19 @@ def choose(page, label, option):
     page.get_by_role("option", name=option, exact=isinstance(option, str)).click()
 
 
+def select_service_day(page, iso_day):
+    from playwright.sync_api import expect
+
+    day = page.get_by_test_id("stDateInputField").last
+    # BaseWeb renders an en dash in this version; use its displayed date format.
+    separator = "–" if "–" in day.input_value() else "-"
+    displayed = iso_day.replace("-", separator)
+    day.fill(displayed)
+    day.press("Tab")
+    page.keyboard.press("Escape")
+    expect(day).to_have_value(displayed)
+
+
 def test_real_explorer_map_trips_click_filters_and_snapshot():
     from playwright.sync_api import expect, sync_playwright
 
@@ -54,6 +67,8 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
         )
         page.get_by_text("Podkład OpenStreetMap", exact=True).click()
         for example in expected["examples"]:
+            # Compare with the explicitly recorded service day, independently of today's date.
+            select_service_day(page, example["day"])
             mode = "Tramwaj" if example["route"]["route_type"] == 0 else "Autobus"
             choose(page, "Rodzaj transportu", mode)
             choose(page, "Linia", example["route_label"])
@@ -220,13 +235,7 @@ def test_real_explorer_map_trips_click_filters_and_snapshot():
             .first
         ).to_be_visible()
         page.screenshot(path=str(output / "real-positions-status.png"), full_page=True)
-        day = (
-            page.get_by_test_id("stDateInput")
-            .filter(has=page.get_by_text("Dzień usługi", exact=True))
-            .get_by_role("textbox")
-        )
-        day.fill("2026-11-01")
-        day.press("Enter")
+        select_service_day(page, "2026-11-01")
         expect(
             page.get_by_text(
                 "Brak kursów tej linii w wybranym dniu. Uwzględniono calendar i calendar_dates.",

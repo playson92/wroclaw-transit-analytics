@@ -144,6 +144,38 @@ def test_map_is_first_view_filters_variants_trips_and_no_shapes(explorer_data):
     assert not at.error and not at.exception
 
 
+@pytest.mark.parametrize(
+    ("timepoint", "departure", "precision", "displayed_time"),
+    [
+        (0, 90600, "Przybliżony", "25:10:00"),
+        (1, 90600, "Dokładny", "25:10:00"),
+        (0, None, "Przybliżony", "Brak czasu"),
+    ],
+)
+def test_stop_departure_table_displays_precision_and_missing_time(
+    explorer_data, monkeypatch, timepoint, departure, precision, displayed_time
+):
+    original_fetch = data.fetch
+
+    def fetch(kind, *args, **kwargs):
+        records = original_fetch(kind, *args, **kwargs)
+        if kind == "departures":
+            return [dict(r, timepoint=timepoint, departure_seconds=departure) for r in records]
+        return records
+
+    monkeypatch.setattr(data, "fetch", fetch)
+    at = app()
+    at.radio(key="explorer_detail").set_value("Przystanek").run()
+    assert not at.exception and not at.error
+    assert any(h.value == "Odjazdy z wybranego przystanku" for h in at.subheader)
+    assert len(at.dataframe) == 1
+    displayed = at.dataframe[0].value
+    assert displayed["Czas"].tolist() == [precision]
+    assert displayed["Odjazd"].tolist() == [displayed_time]
+    assert displayed["Przyjazd"].tolist() == ["Brak czasu"]
+    assert "00:00:00" not in displayed["Odjazd"].tolist()
+
+
 def test_position_failure_does_not_remove_trip_tables(explorer_data, monkeypatch):
     monkeypatch.setattr(
         positions,

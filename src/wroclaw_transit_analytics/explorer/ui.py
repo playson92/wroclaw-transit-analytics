@@ -360,6 +360,7 @@ def render(source, dataset):
                     "trip_id": r["trip_id"],
                     "Wizyta": r["stop_sequence"],
                     "Wsiadanie": timetable([r])[0]["Wsiadanie"],
+                    "Czas": timetable([r])[0]["Czas"],
                 }
                 for r in departures
             ]
