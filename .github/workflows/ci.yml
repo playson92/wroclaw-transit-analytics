@@ -315,7 +315,9 @@ jobs:
           docker compose -f compose.demo.yaml config --format json > "$GITHUB_WORKSPACE/evidence/compose-resolved.json"
           docker compose -f compose.demo.yaml up --build -d --wait 2>&1 | tee "$GITHUB_WORKSPACE/evidence/fresh-start.log"
           docker compose -f compose.demo.yaml ps --all --format json > "$GITHUB_WORKSPACE/evidence/services-first.json"
-          docker image inspect wta-portfolio-app python:3.12-slim postgres:17 --format '{"id":"{{.Id}}","architecture":"{{.Architecture}}","os":"{{.Os}}","repo_digests":{{json .RepoDigests}}}' > "$GITHUB_WORKSPACE/evidence/native-images.jsonl"
+          docker image inspect wta-portfolio-app postgres:17 --format '{"id":"{{.Id}}","architecture":"{{.Architecture}}","os":"{{.Os}}","repo_digests":{{json .RepoDigests}}}' > "$GITHUB_WORKSPACE/evidence/native-images.jsonl"
+          # BuildKit need not load its base image into the daemon's local tags.
+          docker buildx imagetools inspect python:3.12-slim > "$GITHUB_WORKSPACE/evidence/python-base-manifest.txt"
           docker compose -f compose.demo.yaml exec -T dashboard python -m pip check > "$GITHUB_WORKSPACE/evidence/dependency-check.txt"
           docker compose -f compose.demo.yaml exec -T dashboard python -m pip freeze > "$GITHUB_WORKSPACE/evidence/installed-dependencies.txt"
           docker compose -f compose.demo.yaml exec -T dashboard python /app/scripts/portfolio_verify.py --credential-file /run/secrets/reader/password > "$GITHUB_WORKSPACE/evidence/portfolio-first.json"
